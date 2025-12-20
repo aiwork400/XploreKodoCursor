@@ -1,0 +1,108 @@
+# ==============================================================================
+# XploreKodo Platform Environment Variables Template
+# ==============================================================================
+# INSTRUCTIONS:
+# 1. Copy this file and rename it to .env
+# 2. Fill in your actual values (replace all YOUR_* placeholders)
+# 3. The .env file is already in .gitignore, so it won't be committed
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Application Flags
+# ------------------------------------------------------------------------------
+# Enable Phase 2 features (Immersive Training, Voice-to-Voice, AR-VR)
+# Set to "true" to enable Phase 2 features, "false" to disable
+PHASE_2_ENABLED=False
+
+# Debug mode (set to "true" for development, "false" for production)
+DEBUG=False
+
+# ------------------------------------------------------------------------------
+# Corridors and Visa Modes
+# ------------------------------------------------------------------------------
+# Comma-separated list of target corridors (e.g., "Japan,Europe,GCC")
+CORRIDORS=Japan,Europe,GCC
+
+# Comma-separated list of visa modes (e.g., "Student,SSW_Caregiver,Skilled_Worker")
+VISA_MODES=Student,SSW_Caregiver,Skilled_Worker
+
+# ------------------------------------------------------------------------------
+# Trilingual Support
+# ------------------------------------------------------------------------------
+# Comma-separated list of supported languages
+TRILINGUAL_SUPPORT=Nepali,Japanese,English
+
+# ------------------------------------------------------------------------------
+# Database Configuration
+# ------------------------------------------------------------------------------
+# PostgreSQL connection string
+# Format: postgresql://username:password@host:port/database_name
+# Example: postgresql://postgres:mypassword@localhost:5432/xplorekodo
+# 
+# IMPORTANT: Replace the following placeholders:
+#   - username: Your PostgreSQL username (default: postgres)
+#   - password: Your PostgreSQL password
+#   - host: Database host (default: localhost)
+#   - port: Database port (default: 5432)
+#   - database_name: Your database name (default: xplorekodo)
+DATABASE_URL=postgresql://postgres:YOUR_POSTGRES_PASSWORD@localhost:5432/xplorekodo
+
+# ------------------------------------------------------------------------------
+# Payment Gateway API Keys
+# ------------------------------------------------------------------------------
+# Stripe API Key (get from https://dashboard.stripe.com/apikeys)
+# Format: sk_test_... (for testing) or sk_live_... (for production)
+STRIPE_API_KEY=YOUR_STRIPE_API_KEY_HERE
+
+# PayPal Client ID (get from https://developer.paypal.com/)
+PAYPAL_CLIENT_ID=YOUR_PAYPAL_CLIENT_ID_HERE
+
+# PayPal Secret (get from https://developer.paypal.com/)
+PAYPAL_SECRET=YOUR_PAYPAL_SECRET_HERE
+
+# ------------------------------------------------------------------------------
+# Email/SMS Notification Services
+# ------------------------------------------------------------------------------
+# SendGrid API Key (for email notifications)
+# Get from https://app.sendgrid.com/settings/api_keys
+SENDGRID_API_KEY=YOUR_SENDGRID_API_KEY_HERE
+
+# Twilio Account SID (for WhatsApp/SMS notifications)
+# Get from https://console.twilio.com/
+TWILIO_ACCOUNT_SID=YOUR_TWILIO_ACCOUNT_SID_HERE
+
+# Twilio Auth Token (for WhatsApp/SMS notifications)
+# Get from https://console.twilio.com/
+TWILIO_AUTH_TOKEN=YOUR_TWILIO_AUTH_TOKEN_HERE
+
+# Twilio Phone Number (format: +1234567890)
+TWILIO_PHONE_NUMBER=YOUR_TWILIO_PHONE_NUMBER_HERE
+
+# ------------------------------------------------------------------------------
+# Translation API
+# ------------------------------------------------------------------------------
+# Translation API Key (if using a third-party translation service)
+TRANSLATION_API_KEY=YOUR_TRANSLATION_API_KEY_HERE
+
+# Translation API URL (if using a third-party translation service)
+TRANSLATION_API_URL=YOUR_TRANSLATION_API_URL_HERE
+
+# ------------------------------------------------------------------------------
+# OpenAI API (for Phase 2: Voice-to-Voice, Whisper, TTS)
+# ------------------------------------------------------------------------------
+# OpenAI API Key (required for Phase 2 features)
+# Get from https://platform.openai.com/api-keys
+# Required for:
+#   - Voice-to-Voice translation (Whisper transcription)
+#   - GPT-4o translation (Nepali -> Japanese)
+#   - Text-to-Speech (Japanese audio generation)
+OPENAI_API_KEY=YOUR_OPENAI_API_KEY_HERE
+
+# ------------------------------------------------------------------------------
+# Security
+# ------------------------------------------------------------------------------
+# Secret key for session management and encryption
+# Generate a secure random string (e.g., using: python -c "import secrets; print(secrets.token_urlsafe(32))")
+# IMPORTANT: Change this in production!
+SECRET_KEY=change-this-in-production-generate-a-secure-random-string
+

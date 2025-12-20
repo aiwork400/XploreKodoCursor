@@ -1,0 +1,42 @@
+{
+  "run_demo_chat_9312d4a1-2455-46c3-b24a-2bb3b18025d7": {
+    "chat_id": "run_demo_chat_9312d4a1-2455-46c3-b24a-2bb3b18025d7",
+    "created_at": "2025-12-14T13:03:09.577686+00:00",
+    "modified_at": "2025-12-14T13:06:25.405202+00:00",
+    "msgs": 9,
+    "branch": "",
+    "summary": "list all the agents that you can communicate with?"
+  },
+  "run_demo_chat_1bd0651e-32f8-4e79-acd9-e95151750597": {
+    "chat_id": "run_demo_chat_1bd0651e-32f8-4e79-acd9-e95151750597",
+    "created_at": "2025-12-16T14:04:45.379112+00:00",
+    "modified_at": "2025-12-16T14:36:28.001091+00:00",
+    "msgs": 8,
+    "branch": "",
+    "summary": "What is your name?"
+  },
+  "run_demo_chat_4af317a9-c8c0-41ec-84e4-81635112b3ce": {
+    "chat_id": "run_demo_chat_4af317a9-c8c0-41ec-84e4-81635112b3ce",
+    "created_at": "2025-12-16T14:49:42.976496+00:00",
+    "modified_at": "2025-12-16T14:49:42.976496+00:00",
+    "msgs": 21,
+    "branch": "",
+    "summary": "Design the Component Interface for the DocumentVaultTool. It mu\u2026"
+  },
+  "run_demo_chat_45a1a068-0f1e-4a87-8979-a04edd8d99cc": {
+    "chat_id": "run_demo_chat_45a1a068-0f1e-4a87-8979-a04edd8d99cc",
+    "created_at": "2025-12-16T15:03:04.152725+00:00",
+    "modified_at": "2025-12-16T15:03:04.152725+00:00",
+    "msgs": 52,
+    "branch": "",
+    "summary": "Implement a Pydantic model named 'SACMStatus' with two fields: \u2026"
+  },
+  "run_demo_chat_ca8242a7-2e34-4333-a2d8-ae8f8a6665e7": {
+    "chat_id": "run_demo_chat_ca8242a7-2e34-4333-a2d8-ae8f8a6665e7",
+    "created_at": "2025-12-16T17:16:45.598345+00:00",
+    "modified_at": "2025-12-16T17:16:45.598345+00:00",
+    "msgs": 22,
+    "branch": "",
+    "summary": "Design the Database Model for User Credentials, including field\u2026"
+  }
+}

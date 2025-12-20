@@ -1,0 +1,44 @@
+{
+  "phase_1": {
+    "description": "Foundation MVP for XploreKodo Global Mobility Hub (SOW1). Focuses on onboarding, trilingual core, visa/legal flows, and payments.",
+    "modules": {
+      "mvp_v1/Legal": [
+        "Visa document vault",
+        "COE/Legal workflow automation",
+        "Compliance & security handling for passports, COEs, and financial records"
+      ],
+      "mvp_v1/Language": [
+        "Trilingual training core (Nepali / Japanese / English)",
+        "JLPT N5–N4 modules",
+        "Kaigo and vocational terminology packs"
+      ],
+      "mvp_v1/Payment": [
+        "Stripe/PayPal integrations",
+        "Tuition and service fee orchestration",
+        "Refund and installment logic"
+      ]
+    }
+  },
+  "phase_2": {
+    "description": "Enrichment layer (SOW2). Immersive and post-placement experience built but gated via PHASE_2_ENABLED.",
+    "modules": {
+      "immersive_v2/AR-VR": [
+        "Immersive AR-VR classrooms",
+        "Simulated workplace & safety drills",
+        "Contextual cultural training experiences"
+      ],
+      "immersive_v2/Voice": [
+        "Voice-based mock interviews",
+        "Interactive voice agents for Q&A and guidance",
+        "Voice-driven onboarding and check-ins"
+      ],
+      "immersive_v2/AI-Coach": [
+        "AI-Avatar Senseis for language and soft-skill coaching",
+        "Post-placement advisory bot for life-abroad troubleshooting",
+        "Longitudinal performance and wellness tracking"
+      ]
+    }
+  }
+}
+
+

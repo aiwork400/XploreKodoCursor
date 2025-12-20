@@ -16,7 +16,7 @@ class CEOAgent(Agent):
             name="CEOAgenrt",
             description="The central interface for the user. Interprets high-level requests and delegates all technical tasks to the God Agent. Uses the CodebaseInspectorTool.",
             instructions=self.get_instructions(),
-            tools=[CodebaseInspectorTool()], # Assign the existing tool
+            tools=[CodebaseInspectorTool], # Assign the existing tool
             **kwargs
         )
         

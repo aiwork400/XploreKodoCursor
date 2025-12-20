@@ -1,0 +1,62 @@
+"""
+XploreKodo Configuration
+
+Loads configuration from environment variables using python-dotenv.
+All sensitive values should be stored in .env file (not tracked in git).
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+env_path = Path(__file__).parent / ".env"
+load_dotenv(dotenv_path=env_path, override=False)
+
+# Application Flags
+PHASE_2_ENABLED = os.getenv("PHASE_2_ENABLED", "False").lower() == "true"
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+
+# Corridors and Visa Modes
+CORRIDORS = os.getenv("CORRIDORS", "Japan,Europe,GCC").split(",")
+VISA_MODES = os.getenv("VISA_MODES", "Student,SSW_Caregiver,Skilled_Worker").split(",")
+
+# Trilingual Support
+TRILINGUAL_SUPPORT = os.getenv("TRILINGUAL_SUPPORT", "Nepali,Japanese,English").split(",")
+
+# Database Configuration
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres:postgres@localhost:5432/xplorekodo",
+)
+
+# Payment Gateway API Keys
+STRIPE_API_KEY = os.getenv("STRIPE_API_KEY", "")
+PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID", "")
+PAYPAL_SECRET = os.getenv("PAYPAL_SECRET", "")
+
+# Email/SMS Notification Services
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
+TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER", "")
+
+# Translation API
+TRANSLATION_API_KEY = os.getenv("TRANSLATION_API_KEY", "")
+TRANSLATION_API_URL = os.getenv("TRANSLATION_API_URL", "")
+
+# OpenAI API (for Phase 2: Voice-to-Voice, Whisper, TTS)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+
+# Google Cloud Translation API (for Multi-Language Socratic Questioning)
+GOOGLE_CLOUD_TRANSLATE_PROJECT_ID = os.getenv("GOOGLE_CLOUD_TRANSLATE_PROJECT_ID", "")
+GOOGLE_CLOUD_TRANSLATE_CREDENTIALS_PATH = os.getenv("GOOGLE_CLOUD_TRANSLATE_CREDENTIALS_PATH", "")
+
+# Google Gemini API (for AI Grading in Language Coaching)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+
+# Security
+SECRET_KEY = os.getenv("SECRET_KEY", "change-this-in-production")

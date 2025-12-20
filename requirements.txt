@@ -1,0 +1,48 @@
+# XploreKodo Platform Dependencies
+
+# Core Framework
+agency-swarm>=1.5.0
+
+# Database
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0  # PostgreSQL driver (binary version for easier Windows installation)
+
+# Environment & Configuration
+python-dotenv>=1.0.0
+
+# API Framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+
+# Dashboard
+streamlit>=1.28.0
+pandas>=2.0.0
+
+# OpenAI (for Phase 2: Voice-to-Voice)
+openai>=1.0.0
+
+# Google Cloud Translation (for Multi-Language Socratic Questioning)
+google-cloud-translate>=3.15.0
+
+# Google Cloud Text-to-Speech (for Voice Integration)
+google-cloud-texttospeech>=2.16.0
+
+# Google Cloud Speech-to-Text (for Language Coaching)
+google-cloud-speech>=2.23.0
+
+# Google Generative AI (Gemini) for AI Grading
+google-generativeai>=0.3.0
+
+# Streamlit Mic Recorder (for audio recording in dashboard)
+streamlit-mic-recorder>=0.0.8
+
+# PDF Processing (for Knowledge Base Extraction)
+PyMuPDF>=1.23.0
+
+# HTTP Requests (for API testing)
+requests>=2.31.0
+
+# Testing (optional)
+pytest>=7.4.0
+
