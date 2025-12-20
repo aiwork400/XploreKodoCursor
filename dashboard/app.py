@@ -24,7 +24,15 @@ from sqlalchemy import or_, text
 from sqlalchemy.orm import Session
 
 import config
-from database.db_manager import Candidate, CurriculumProgress, Payment, DocumentVault, SessionLocal
+from database.db_manager import Candidate, CurriculumProgress, Payment, DocumentVault, SessionLocal, StudentPerformance
+
+# Try to import GetCurrentPhase for phase visualization
+try:
+    from agency.student_progress_agent.tools import GetCurrentPhase
+    PHASE_TOOL_AVAILABLE = True
+except ImportError:
+    PHASE_TOOL_AVAILABLE = False
+    GetCurrentPhase = None
 
 # Page configuration
 st.set_page_config(
@@ -272,9 +280,27 @@ def main():
 
     # Sidebar navigation
     st.sidebar.title("Navigation")
+    
+    # Admin Mode Toggle (Security Check)
+    admin_mode = st.sidebar.checkbox("🔒 Admin Mode", key="admin_mode", help="Enable to access Admin Dashboard")
+    
+    # Check for critical logs (notification badge)
+    if admin_mode:
+        try:
+            from utils.activity_logger import ActivityLogger
+            critical_logs = ActivityLogger.get_recent_critical_logs(hours=1)
+            if critical_logs:
+                st.sidebar.warning(f"⚠️ {len(critical_logs)} critical event(s) in last hour")
+        except Exception:
+            pass
+    
+    page_options = ["Candidate View", "Wisdom Hub", "Live Simulator", "Financial Ledger", "Compliance"]
+    if admin_mode:
+        page_options.append("Admin Dashboard")
+    
     page = st.sidebar.radio(
         "Select View",
-        ["Candidate View", "Wisdom Hub", "Live Simulator", "Financial Ledger", "Compliance"],
+        page_options,
     )
 
     if page == "Candidate View":
@@ -287,11 +313,64 @@ def main():
         show_financial_ledger()
     elif page == "Compliance":
         show_compliance_view()
+    elif page == "Admin Dashboard":
+        if admin_mode:
+            show_admin_dashboard()
+        else:
+            st.error("🔒 Admin Mode must be enabled to access this page.")
 
 
 def show_candidate_view():
     """Display candidate view with searchable list."""
     st.header("👥 Candidate View")
+
+    # AI Daily Briefing Section (at the top)
+    st.markdown("---")
+    st.subheader("🎓 AI Daily Briefing")
+    
+    # Get candidate list for briefing selection
+    db = get_db_session()
+    try:
+        candidates = db.query(Candidate).all()
+        candidate_options = {f"{c.full_name} ({c.candidate_id})": c.candidate_id for c in candidates}
+        
+        if candidate_options:
+            selected_briefing_candidate = st.selectbox(
+                "Select Candidate for Briefing",
+                options=list(candidate_options.keys()),
+                key="briefing_candidate_select"
+            )
+            
+            selected_candidate_id = candidate_options[selected_briefing_candidate]
+            
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.info("💡 Click the button below to generate an AI-powered executive summary of the candidate's progress in the last 24 hours.")
+            with col2:
+                if st.button("🔄 Generate Briefing", key="generate_briefing_btn", use_container_width=True):
+                    try:
+                        from agency.student_progress_agent.tools import GenerateDailyBriefing
+                        
+                        briefing_tool = GenerateDailyBriefing(candidate_id=selected_candidate_id)
+                        briefing_result = briefing_tool.run()
+                        
+                        if briefing_result and not briefing_result.startswith("Error"):
+                            st.success("**📊 Daily Briefing:**")
+                            st.info(briefing_result)
+                        else:
+                            st.warning(briefing_result if briefing_result else "Unable to generate briefing.")
+                    except Exception as e:
+                        st.error(f"Error generating briefing: {str(e)}")
+                        import traceback
+                        st.code(traceback.format_exc())
+        else:
+            st.info("No candidates available for briefing generation.")
+    except Exception as e:
+        st.error(f"Error loading candidates: {str(e)}")
+    finally:
+        db.close()
+    
+    st.markdown("---")
 
     # Filters
     col1, col2, col3 = st.columns(3)
@@ -367,6 +446,16 @@ def show_candidate_view():
                                     else 0,
                                     text=f"JLPT N4: {curriculum.jlpt_n4_units_completed}/{curriculum.jlpt_n4_total_units} units",
                                 )
+                                
+                                # Show Phase Unlock Progress
+                                st.markdown("---")
+                                st.subheader("🚪 Phase Unlock Progress")
+                                show_phase_unlock_progress(selected_id)
+                                
+                                # Show Learning Curve
+                                st.markdown("---")
+                                st.subheader("📈 Learning Curve")
+                                show_learning_curve(selected_id)
                                 
                                 # Show Socratic Training History
                                 st.markdown("---")
@@ -751,56 +840,505 @@ def show_socratic_history(dialogue_history: list | None, candidate_id: str):
             )
             
             if audio_data:
+                # Show recorded audio player
+                st.audio(audio_data["bytes"], format="audio/wav")
+                
                 # Process audio when recorded
                 if st.button(f"📤 Submit & Grade Answer", key=f"submit_{question_id}"):
                     import base64
-                    import requests
+                    from agency.training_agent.language_coaching_tool import LanguageCoachingTool
                     
                     # Convert audio_data to base64
                     audio_bytes = audio_data["bytes"]
                     audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
-                    
-                    # Get API base URL (use default or from session state)
-                    api_base_url = st.session_state.get("api_base_url", "http://localhost:8000")
                     
                     # Get expected answer from question data if available
                     expected_answer = None
                     if entry.get("question"):
                         expected_answer = entry["question"].get("english", "")
                     
-                    # Call language coaching API
-                    payload = {
-                        "candidate_id": candidate_id,
-                        "audio_base64": audio_base64,
-                        "language_code": language_code,
-                        "question_id": question_id,
-                        "expected_answer": expected_answer,
-                    }
+                    # Get concept reference for better context
+                    if entry.get("concept_reference"):
+                        concept_title = entry["concept_reference"].get("concept_title", "")
+                        if concept_title and not expected_answer:
+                            expected_answer = f"Explain the meaning of '{concept_title}' in Japanese caregiving context."
                     
-                    with st.spinner("🎤 Transcribing and grading your answer..."):
+                    # Create tool instance
+                    transcript_tool = LanguageCoachingTool(
+                        candidate_id=candidate_id,
+                        audio_base64=audio_base64,
+                        language_code=language_code,
+                        question_id=question_id,
+                        expected_answer=expected_answer,
+                    )
+                    
+                    # Step 1: Transcribe audio
+                    with st.spinner("🎤 Transcribing your audio..."):
                         try:
-                            response = requests.post(
-                                f"{api_base_url}/language-coaching",
-                                json=payload,
-                                timeout=60
+                            # Transcribe audio
+                            audio_content = base64.b64decode(audio_base64)
+                            transcript = transcript_tool._transcribe_audio(audio_content, language_code)
+                            
+                            if not transcript:
+                                st.error("❌ Failed to transcribe audio. Please check your microphone and try again.")
+                                st.stop()
+                            
+                            # Display transcript immediately
+                            st.markdown("**📝 What the AI heard:**")
+                            st.info(f'"{transcript}"')
+                            st.markdown("---")
+                            
+                        except Exception as e:
+                            st.error(f"❌ Transcription error: {str(e)}")
+                            import traceback
+                            st.code(traceback.format_exc())
+                            st.stop()
+                    
+                    # Step 2: Grade response
+                    with st.spinner("🤖 AI is grading your answer..."):
+                        try:
+                            # Grade the transcript
+                            grading_result = transcript_tool._grade_response_with_gemini(
+                                transcript=transcript,
+                                language=language_code,
+                                expected_answer=expected_answer
                             )
                             
-                            if response.status_code == 200:
-                                result = response.json()
-                                if result.get("success"):
-                                    st.success("✅ Answer graded successfully! Refresh to see results.")
-                                    st.rerun()
-                                else:
-                                    st.error(f"Error: {result.get('message', 'Unknown error')}")
-                            else:
-                                st.error(f"Error: {response.status_code} - {response.text}")
+                            # Step 3: Save to database
+                            from database.db_manager import SessionLocal, CurriculumProgress
+                            from datetime import datetime, timezone
+                            
+                            db = SessionLocal()
+                            try:
+                                curriculum = db.query(CurriculumProgress).filter(
+                                    CurriculumProgress.candidate_id == candidate_id
+                                ).first()
+                                
+                                if not curriculum:
+                                    curriculum = CurriculumProgress(candidate_id=candidate_id)
+                                    db.add(curriculum)
+                                    db.flush()
+                                
+                                # Update dialogue_history
+                                dialogue_history = curriculum.dialogue_history or []
+                                
+                                # Find the question entry if question_id is provided
+                                entry_updated = False
+                                if question_id:
+                                    for entry in dialogue_history:
+                                        if entry.get("question_id") == question_id:
+                                            # Update existing entry with response
+                                            entry["candidate_answer"] = transcript
+                                            entry["answer_timestamp"] = datetime.now(timezone.utc).isoformat()
+                                            entry["grading"] = {
+                                                "grade": grading_result["grade"],
+                                                "accuracy_feedback": grading_result["accuracy_feedback"],
+                                                "grammar_feedback": grading_result["grammar_feedback"],
+                                                "pronunciation_hint": grading_result["pronunciation_hint"],
+                                                "grading_timestamp": datetime.now(timezone.utc).isoformat(),
+                                            }
+                                            entry_updated = True
+                                            break
+                                
+                                if not entry_updated:
+                                    # Create new entry
+                                    dialogue_history.append({
+                                        "question_id": question_id,
+                                        "candidate_answer": transcript,
+                                        "answer_timestamp": datetime.now(timezone.utc).isoformat(),
+                                        "grading": {
+                                            "grade": grading_result["grade"],
+                                            "accuracy_feedback": grading_result["accuracy_feedback"],
+                                            "grammar_feedback": grading_result["grammar_feedback"],
+                                            "pronunciation_hint": grading_result["pronunciation_hint"],
+                                            "grading_timestamp": datetime.now(timezone.utc).isoformat(),
+                                        },
+                                    })
+                                
+                                # Save to database
+                                curriculum.dialogue_history = dialogue_history
+                                db.commit()
+                                
+                                # Also record in student_performance table
+                                from agency.student_progress_agent.tools import RecordProgress
+                                
+                                # Try to get word_title from dialogue_history
+                                word_title = None
+                                category = None
+                                if question_id:
+                                    for entry in dialogue_history:
+                                        if entry.get("question_id") == question_id:
+                                            if "concept_reference" in entry:
+                                                word_title = entry["concept_reference"].get("concept_title")
+                                            break
+                                
+                                if word_title:
+                                    record_tool = RecordProgress(
+                                        candidate_id=candidate_id,
+                                        word_title=word_title,
+                                        score=grading_result["grade"],
+                                        feedback=f"Accuracy: {grading_result['accuracy_feedback']}\nGrammar: {grading_result['grammar_feedback']}",
+                                        accuracy_feedback=grading_result["accuracy_feedback"],
+                                        grammar_feedback=grading_result["grammar_feedback"],
+                                        pronunciation_hint=grading_result["pronunciation_hint"],
+                                        transcript=transcript,
+                                        language_code=language_code,
+                                        category=category or "caregiving_vocabulary",
+                                    )
+                                    record_tool.run()
+                                
+                                st.success("✅ Answer graded and saved successfully!")
+                                
+                                # Display grading results
+                                st.markdown("**📊 AI Grading Results:**")
+                                grade = grading_result.get("grade", 0)
+                                grade_color = "🟢" if grade >= 8 else "🟡" if grade >= 6 else "🔴"
+                                st.metric("Overall Grade", f"{grade_color} {grade}/10")
+                                
+                                st.markdown("**✅ Accuracy Feedback:**")
+                                st.write(grading_result.get("accuracy_feedback", "N/A"))
+                                
+                                st.markdown("**📝 Grammar Feedback:**")
+                                st.write(grading_result.get("grammar_feedback", "N/A"))
+                                
+                                st.markdown("**🎯 Pronunciation Hint:**")
+                                st.info(grading_result.get("pronunciation_hint", "N/A"))
+                                
+                            except Exception as e:
+                                db.rollback()
+                                st.error(f"❌ Database error: {str(e)}")
+                                import traceback
+                                st.code(traceback.format_exc())
+                            finally:
+                                db.close()
+                            
+                            # Refresh to show updated results
+                            st.rerun()
+                            
                         except Exception as e:
-                            st.error(f"Connection error: {str(e)}")
+                            st.error(f"❌ Grading error: {str(e)}")
+                            import traceback
+                            st.code(traceback.format_exc())
         except ImportError:
             st.warning("⚠️ streamlit-mic-recorder not installed. Please install it to record answers.")
             st.code("pip install streamlit-mic-recorder")
         
         st.markdown("---")
+
+
+def show_admin_dashboard():
+    """Display Admin Monitoring Center dashboard."""
+    st.header("🛡️ Admin Monitoring Center")
+    
+    # Check admin mode (double check)
+    if not st.session_state.get("admin_mode", False):
+        st.error("🔒 Admin Mode must be enabled to access this page.")
+        return
+    
+    # Get critical logs for notification badge
+    try:
+        from utils.activity_logger import ActivityLogger
+        
+        critical_logs = ActivityLogger.get_recent_critical_logs(hours=1)
+        
+        # Notification Badge
+        if critical_logs:
+            st.error(f"🚨 **{len(critical_logs)} Critical Event(s) in Last Hour**")
+            st.markdown("---")
+        
+        # System Notifications Section
+        st.subheader("📢 System Notifications")
+        
+        if critical_logs:
+            for log in critical_logs[:10]:  # Show top 10
+                severity_color = "🔴" if log.severity == "Error" else "🟡"
+                st.markdown(f"""
+                {severity_color} **{log.severity}** - {log.event_type}
+                - **Time:** {log.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC')}
+                - **User:** {log.user_id or 'System'}
+                - **Message:** {log.message or 'No message'}
+                """)
+                if log.event_metadata:
+                    with st.expander("View Details"):
+                        st.json(log.event_metadata)
+                st.markdown("---")
+        else:
+            st.success("✅ No critical events in the last hour. System is running smoothly.")
+        
+        st.markdown("---")
+        
+        # Audit Log Section
+        st.subheader("📋 Audit Log")
+        
+        # Filters
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            filter_user_id = st.text_input("Filter by User ID", "", key="audit_user_filter")
+        with col2:
+            filter_event_type = st.selectbox(
+                "Filter by Event Type",
+                ["All", "Grading", "Briefing", "Error", "API_Call"],
+                key="audit_event_filter"
+            )
+        with col3:
+            filter_severity = st.selectbox(
+                "Filter by Severity",
+                ["All", "Info", "Warning", "Error"],
+                key="audit_severity_filter"
+            )
+        
+        # Get audit logs
+        user_id_filter = filter_user_id if filter_user_id else None
+        event_type_filter = filter_event_type if filter_event_type != "All" else None
+        
+        audit_logs = ActivityLogger.get_audit_logs(
+            user_id=user_id_filter,
+            event_type=event_type_filter,
+            limit=100
+        )
+        
+        # Apply severity filter
+        if filter_severity != "All":
+            audit_logs = [log for log in audit_logs if log.severity == filter_severity]
+        
+        if audit_logs:
+            # Create DataFrame for display
+            log_data = []
+            for log in audit_logs:
+                log_data.append({
+                    "Timestamp": log.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC'),
+                    "User ID": log.user_id or "System",
+                    "Event Type": log.event_type,
+                    "Severity": log.severity,
+                    "Message": log.message or "N/A",
+                })
+            
+            df_logs = pd.DataFrame(log_data)
+            st.dataframe(df_logs, use_container_width=True, hide_index=True)
+            
+            # Detailed view for selected log
+            if len(audit_logs) > 0:
+                st.markdown("---")
+                st.subheader("🔍 Log Details")
+                
+                selected_index = st.selectbox(
+                    "Select Log Entry",
+                    range(len(audit_logs)),
+                    format_func=lambda x: f"{audit_logs[x].timestamp.strftime('%Y-%m-%d %H:%M:%S')} - {audit_logs[x].event_type} ({audit_logs[x].severity})"
+                )
+                
+                selected_log = audit_logs[selected_index]
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write(f"**Timestamp:** {selected_log.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+                    st.write(f"**User ID:** {selected_log.user_id or 'System'}")
+                with col2:
+                    st.write(f"**Event Type:** {selected_log.event_type}")
+                    st.write(f"**Severity:** {selected_log.severity}")
+                
+                st.write(f"**Message:** {selected_log.message or 'No message'}")
+                
+                if selected_log.event_metadata:
+                    st.write("**Metadata:**")
+                    st.json(selected_log.event_metadata)
+                
+                # Special handling for Grading events
+                if selected_log.event_type == "Grading" and selected_log.event_metadata:
+                    st.markdown("---")
+                    st.subheader("📊 Grading Details")
+                    
+                    metadata = selected_log.event_metadata
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Word", metadata.get("word_title", "N/A"))
+                    with col2:
+                        score = metadata.get("score", 0)
+                        score_color = "🟢" if score >= 8 else "🟡" if score >= 6 else "🔴"
+                        st.metric("Score", f"{score_color} {score}/10")
+                    with col3:
+                        st.metric("User", selected_log.user_id or "N/A")
+                    
+                    if metadata.get("transcript"):
+                        st.write("**Student's Answer (Transcript):**")
+                        st.info(f'"{metadata["transcript"]}"')
+                    
+                    if metadata.get("feedback"):
+                        feedback = metadata["feedback"]
+                        if feedback.get("accuracy"):
+                            st.write("**Accuracy Feedback:**")
+                            st.write(feedback["accuracy"])
+                        if feedback.get("grammar"):
+                            st.write("**Grammar Feedback:**")
+                            st.write(feedback["grammar"])
+                        if feedback.get("pronunciation"):
+                            st.write("**Pronunciation Hint:**")
+                            st.info(feedback["pronunciation"])
+        else:
+            st.info("No audit logs found matching the filters.")
+        
+    except ImportError:
+        st.error("Activity logger not available. Please ensure utils/activity_logger.py exists.")
+    except Exception as e:
+        st.error(f"Error loading admin dashboard: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
+
+
+def show_phase_unlock_progress(candidate_id: str):
+    """
+    Display phase unlock progress bar showing how close the student is to the next phase.
+    """
+    if not PHASE_TOOL_AVAILABLE:
+        st.info("Phase progression system not available.")
+        return
+    
+    db = get_db_session()
+    try:
+        # Get current phase
+        phase_tool = GetCurrentPhase(candidate_id=candidate_id)
+        phase_result = phase_tool.run()
+        
+        import json
+        phase_info = json.loads(phase_result)
+        
+        current_phase = phase_info.get("current_phase", 1)
+        phase_unlocked = phase_info.get("phase_unlocked", [True, False, False])
+        next_phase_progress = phase_info.get("next_phase_progress", {})
+        metrics = phase_info.get("metrics", {})
+        
+        # Display current phase
+        phase_names = {
+            1: "Phase 1: N5 Basics",
+            2: "Phase 2: Caregiving Essentials",
+            3: "Phase 3: Scenario Mastery"
+        }
+        
+        st.markdown(f"**Current Phase: {phase_names.get(current_phase, f'Phase {current_phase}')}**")
+        
+        # Show phase unlock status
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            status = "✅ Unlocked" if phase_unlocked[0] else "🔒 Locked"
+            st.metric("Phase 1", status)
+        with col2:
+            status = "✅ Unlocked" if len(phase_unlocked) > 1 and phase_unlocked[1] else "🔒 Locked"
+            st.metric("Phase 2", status)
+        with col3:
+            status = "✅ Unlocked" if len(phase_unlocked) > 2 and phase_unlocked[2] else "🔒 Locked"
+            st.metric("Phase 3", status)
+        
+        # Show progress to next phase
+        if current_phase < 3 and next_phase_progress:
+            next_phase = next_phase_progress.get("phase")
+            overall_progress = next_phase_progress.get("overall_progress", 0)
+            requirements = next_phase_progress.get("requirements", {})
+            
+            if next_phase:
+                st.markdown(f"**Progress to Phase {next_phase}:**")
+                
+                # Progress bar
+                st.progress(
+                    overall_progress / 100.0,
+                    text=f"{overall_progress:.1f}% Complete"
+                )
+                
+                # Show requirements
+                st.markdown("**Requirements:**")
+                for req_name, req_value in requirements.items():
+                    st.write(f"  • {req_name.replace('_', ' ').title()}: {req_value}")
+        
+        elif current_phase == 3:
+            st.success("🎉 Maximum phase reached! You've unlocked all curriculum phases.")
+        
+        # Show current metrics
+        st.markdown("**Current Metrics:**")
+        if metrics.get("n5_count", 0) > 0:
+            st.write(f"  • N5 Average: {metrics.get('n5_avg', 0):.1f}/10 ({metrics.get('n5_count', 0)} words)")
+        if metrics.get("caregiving_count", 0) > 0:
+            st.write(f"  • Caregiving Average: {metrics.get('caregiving_avg', 0):.1f}/10 ({metrics.get('caregiving_count', 0)} words)")
+        
+    except Exception as e:
+        st.error(f"Error loading phase progress: {str(e)}")
+    finally:
+        db.close()
+
+
+def show_learning_curve(candidate_id: str):
+    """
+    Display learning curve chart showing average scores over time.
+    Uses student_performance table to calculate daily/weekly averages.
+    """
+    db = get_db_session()
+    try:
+        # Get all performance records for this candidate, ordered by date
+        performances = db.query(StudentPerformance).filter(
+            StudentPerformance.candidate_id == candidate_id
+        ).order_by(StudentPerformance.created_at).all()
+        
+        if not performances:
+            st.info("No performance data yet. Start practicing to see your learning curve!")
+            return
+        
+        # Group by date and calculate average score per day
+        from collections import defaultdict
+        from datetime import datetime
+        
+        daily_scores = defaultdict(list)
+        for perf in performances:
+            date_key = perf.created_at.date() if perf.created_at else datetime.now().date()
+            daily_scores[date_key].append(perf.score)
+        
+        # Calculate daily averages
+        dates = sorted(daily_scores.keys())
+        avg_scores = [sum(daily_scores[date]) / len(daily_scores[date]) for date in dates]
+        
+        # Create DataFrame for chart
+        import pandas as pd
+        df = pd.DataFrame({
+            'Date': dates,
+            'Average Score': avg_scores,
+        })
+        
+        # Display metrics
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Attempts", len(performances))
+        with col2:
+            overall_avg = sum(avg_scores) / len(avg_scores) if avg_scores else 0
+            st.metric("Overall Average", f"{overall_avg:.1f}/10")
+        with col3:
+            recent_avg = avg_scores[-7:] if len(avg_scores) >= 7 else avg_scores
+            recent_avg_score = sum(recent_avg) / len(recent_avg) if recent_avg else 0
+            st.metric("Last 7 Days", f"{recent_avg_score:.1f}/10")
+        
+        # Display line chart
+        if len(dates) > 1:
+            st.line_chart(df.set_index('Date')['Average Score'])
+        else:
+            st.bar_chart(df.set_index('Date')['Average Score'])
+        
+        # Show category breakdown
+        st.markdown("**📊 Performance by Category:**")
+        category_avg = {}
+        category_counts = {}
+        
+        for perf in performances:
+            cat = perf.category or "uncategorized"
+            if cat not in category_avg:
+                category_avg[cat] = 0
+                category_counts[cat] = 0
+            category_avg[cat] += perf.score
+            category_counts[cat] += 1
+        
+        for cat in sorted(category_avg.keys()):
+            avg = category_avg[cat] / category_counts[cat]
+            st.write(f"  • **{cat}**: {avg:.1f}/10 ({category_counts[cat]} attempts)")
+        
+    except Exception as e:
+        st.error(f"Error loading learning curve: {str(e)}")
+    finally:
+        db.close()
 
 
 def show_compliance_view():

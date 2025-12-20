@@ -68,6 +68,7 @@ class Candidate(Base):
     documents = relationship("DocumentVault", back_populates="candidate", cascade="all, delete-orphan")
     curriculum = relationship("CurriculumProgress", back_populates="candidate", uselist=False, cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="candidate", cascade="all, delete-orphan")
+    performance_records = relationship("StudentPerformance", back_populates="candidate", cascade="all, delete-orphan")
 
 
 class DocumentVault(Base):
@@ -166,6 +167,50 @@ class KnowledgeBase(Base):
     language = Column(String(10), default="ja", nullable=False)  # 'ja' for Japanese
     category = Column(String(100), nullable=True)  # e.g., 'grammar', 'vocabulary', 'caregiving'
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Relationship
+    performance_records = relationship("StudentPerformance", back_populates="word")
+
+
+class StudentPerformance(Base):
+    """Student performance table - tracks individual word/concept performance for RAG-based curriculum."""
+
+    __tablename__ = "student_performance"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    candidate_id = Column(String(100), ForeignKey("candidates.candidate_id", ondelete="CASCADE"), nullable=False)
+    word_id = Column(Integer, ForeignKey("knowledge_base.id", ondelete="SET NULL"), nullable=True)
+    word_title = Column(String(500), nullable=True)  # Denormalized for quick access
+    score = Column(Integer, nullable=False)  # 1-10 grade
+    feedback = Column(Text, nullable=True)  # General feedback
+    accuracy_feedback = Column(Text, nullable=True)
+    grammar_feedback = Column(Text, nullable=True)
+    pronunciation_hint = Column(Text, nullable=True)
+    transcript = Column(Text, nullable=True)  # Candidate's transcribed answer
+    language_code = Column(String(10), default="ja-JP", nullable=False)
+    category = Column(String(100), nullable=True)  # e.g., 'jlpt_n5_vocabulary', 'caregiving_vocabulary'
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Relationships
+    candidate = relationship("Candidate", back_populates="performance_records")
+    word = relationship("KnowledgeBase", back_populates="performance_records")
+
+
+class ActivityLog(Base):
+    """Activity logs table - tracks all system events for admin monitoring."""
+
+    __tablename__ = "activity_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+    user_id = Column(String(100), nullable=True, index=True)  # candidate_id or admin_id
+    event_type = Column(String(50), nullable=False, index=True)  # Grading, Briefing, Error, etc.
+    severity = Column(String(20), nullable=False, index=True)  # Info, Warning, Error
+    event_metadata = Column(JSON, nullable=True)  # JSON data with event details (renamed from 'metadata' to avoid SQLAlchemy conflict)
+    message = Column(Text, nullable=True)  # Human-readable message
+
+    def __repr__(self):
+        return f"<ActivityLog(id={self.id}, event_type={self.event_type}, severity={self.severity}, timestamp={self.timestamp})>"
 
 
 # Database session management

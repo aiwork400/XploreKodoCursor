@@ -33,6 +33,7 @@ from mvp_v1.training.advisory_agent import AdvisoryAgent
 from agency.operations_agent.operations_agent import OperationsAgent
 from agency.financier_agent.financier_agent import FinancierAgent
 from agency.training_agent.training_agent import LanguageCoachAgent
+from agency.student_progress_agent.student_progress_agent import StudentProgressAgent
 from mvp_v1.legal.visa_compliance_agent_swarm import VisaComplianceAgent
 from agency.messenger_agent.messenger_agent import MessengerAgent
 from agency.vr_environment_agent.vr_environment_agent import VREnvironmentAgent
@@ -52,6 +53,7 @@ advisory_agent = AdvisoryAgent()
 operations_agent = OperationsAgent()
 financier_agent = FinancierAgent()
 training_agent = LanguageCoachAgent()
+student_progress_agent = StudentProgressAgent()
 visa_compliance_agent = VisaComplianceAgent()
 messenger_agent = MessengerAgent()
 vr_environment_agent = VREnvironmentAgent()
@@ -75,6 +77,8 @@ communication_flows = [
     (god_agent, operations_agent),  # For wisdom reports and platform health
     (god_agent, financier_agent),  # For fee collection and financial records
     (god_agent, training_agent),  # For skill interviews and curriculum tracking
+    (god_agent, student_progress_agent),  # For Memory Layer and analytics
+    (training_agent, student_progress_agent),  # LanguageCoachAgent records performance
     (god_agent, visa_compliance_agent),  # For visa compliance and auto-compliance checking
     (god_agent, messenger_agent),  # For candidate notifications and communications
     (visa_compliance_agent, messenger_agent),  # Auto-notify when compliance passes

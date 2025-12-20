@@ -47,6 +47,8 @@ google_creds.json
 # Temporary files
 *.tmp
 *.temp
-test_*.py
-verify_*.py
+# Note: test_*.py and verify_*.py in tests/ directory should be committed
+# Only ignore test files in root directory
+/test_*.py
+/verify_*.py
 

@@ -31,9 +31,9 @@ except ImportError:
     GOOGLE_SPEECH_AVAILABLE = False
     speech = None
 
-# Try to import google-generativeai for Gemini
+# Try to import google-genai for Gemini
 try:
-    import google.generativeai as genai
+    from google import genai
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
@@ -72,28 +72,38 @@ class LanguageCoachingTool(BaseTool):
         
         try:
             project_root = Path(__file__).parent.parent.parent
-            credentials_path = config.GOOGLE_CLOUD_TRANSLATE_CREDENTIALS_PATH
-            
             client = None
             
-            # Try credentials path from config
-            if credentials_path:
-                creds_path = Path(credentials_path)
+            # Priority 1: Check GOOGLE_APPLICATION_CREDENTIALS from config (.env)
+            if config.GOOGLE_APPLICATION_CREDENTIALS:
+                creds_path = Path(config.GOOGLE_APPLICATION_CREDENTIALS)
                 if not creds_path.is_absolute():
-                    creds_path = project_root / credentials_path
+                    creds_path = project_root / creds_path
                 
                 if creds_path.exists():
                     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = str(creds_path)
                     client = speech.SpeechClient.from_service_account_json(str(creds_path))
             
-            # If no client yet, try default credentials file location
+            # Priority 2: Try GOOGLE_CLOUD_TRANSLATE_CREDENTIALS_PATH from config
+            if client is None:
+                credentials_path = config.GOOGLE_CLOUD_TRANSLATE_CREDENTIALS_PATH
+                if credentials_path:
+                    creds_path = Path(credentials_path)
+                    if not creds_path.is_absolute():
+                        creds_path = project_root / credentials_path
+                    
+                    if creds_path.exists():
+                        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = str(creds_path)
+                        client = speech.SpeechClient.from_service_account_json(str(creds_path))
+            
+            # Priority 3: Try default credentials file location (google_creds.json)
             if client is None:
                 default_creds = project_root / "google_creds.json"
                 if default_creds.exists():
                     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = str(default_creds)
                     client = speech.SpeechClient.from_service_account_json(str(default_creds))
             
-            # If still no client, try environment variable
+            # Priority 4: Try environment variable (if already set)
             if client is None and os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
                 client = speech.SpeechClient()
             
@@ -150,39 +160,24 @@ class LanguageCoachingTool(BaseTool):
             return None
 
     def _initialize_gemini_client(self):
-        """Initialize Gemini client using Google Cloud credentials."""
+        """Initialize Gemini client using Google Cloud API key from .env."""
         if not GEMINI_AVAILABLE:
             return None
         
         try:
-            project_root = Path(__file__).parent.parent.parent
-            credentials_path = config.GOOGLE_CLOUD_TRANSLATE_CREDENTIALS_PATH
-            
-            # Try to get API key from environment or config
+            # Get API key from config (loaded from .env file)
             api_key = config.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")
             
             if not api_key:
-                # Try to extract from credentials file if available
-                if credentials_path:
-                    creds_path = Path(credentials_path)
-                    if not creds_path.is_absolute():
-                        creds_path = project_root / credentials_path
-                    
-                    if creds_path.exists():
-                        # For Gemini, we can use the same credentials
-                        # But Gemini typically uses API key, so we'll try both
-                        pass
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning("GEMINI_API_KEY not found in .env file. Please set GEMINI_API_KEY in your .env file.")
+                return None
             
-            # Initialize Gemini (will use GOOGLE_APPLICATION_CREDENTIALS if API key not set)
-            if api_key:
-                genai.configure(api_key=api_key)
-            else:
-                # Use default credentials
-                genai.configure()
-            
-            # Use Gemini 1.5 Flash model
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            return model
+            # Initialize Gemini client with API key from .env
+            # The new SDK requires api_key parameter during client initialization
+            client = genai.Client(api_key=api_key)
+            return client
             
         except Exception as e:
             import logging
@@ -202,8 +197,8 @@ class LanguageCoachingTool(BaseTool):
         Returns:
             dict with 'grade' (1-10), 'accuracy_feedback', 'grammar_feedback', 'pronunciation_hint'
         """
-        model = self._initialize_gemini_client()
-        if not model:
+        client = self._initialize_gemini_client()
+        if not client:
             # Fallback: return default grading
             return {
                 "grade": 5,
@@ -247,10 +242,14 @@ This is a response to a Socratic question about Japanese caregiving. The candida
 }}
 """
             
-            # Generate response
-            response = model.generate_content(prompt)
+            # Generate response using new SDK syntax
+            # Note: Using gemini-2.5-flash (gemini-1.5-flash was deprecated)
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
             
-            # Parse JSON response
+            # Parse JSON response - new SDK uses response.text
             response_text = response.text.strip()
             
             # Try to extract JSON from markdown code blocks if present
@@ -382,6 +381,79 @@ This is a response to a Socratic question about Japanese caregiving. The candida
             curriculum.dialogue_history = dialogue_history
             db.commit()
 
+            # Extract word title from question_id or dialogue_history for performance recording
+            word_title = None
+            category = None
+            
+            if self.question_id and dialogue_history:
+                # Try to find the question entry to get word title
+                for entry in dialogue_history:
+                    if entry.get("question_id") == self.question_id:
+                        # Try to extract word from concept reference
+                        if "concept_reference" in entry:
+                            word_title = entry["concept_reference"].get("concept_title")
+                            category = entry.get("category", entry.get("topic", "knowledge_base"))
+                        # Also check if question data has concept info
+                        elif "question" in entry:
+                            question_data = entry.get("question", {})
+                            # Try to extract from question text (look for Japanese characters)
+                            import re
+                            japanese_match = re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+', str(question_data))
+                            if japanese_match:
+                                word_title = japanese_match.group(0)
+                        break
+            
+            # If word_title still not found, try to extract from expected_answer or transcript
+            if not word_title:
+                # Try to extract Japanese word from transcript or expected_answer
+                import re
+                text_to_search = self.expected_answer or transcript or ""
+                japanese_match = re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+', text_to_search)
+                if japanese_match:
+                    word_title = japanese_match.group(0)
+                    category = "knowledge_base"
+
+            # Record performance in student_performance table (Memory Layer)
+            if word_title:
+                try:
+                    from agency.student_progress_agent.tools import RecordProgress
+                    
+                    record_tool = RecordProgress(
+                        candidate_id=self.candidate_id,
+                        word_title=word_title,
+                        score=grading_result['grade'],
+                        feedback=f"Language coaching session - {grading_result.get('accuracy_feedback', '')[:100]}",
+                        accuracy_feedback=grading_result.get('accuracy_feedback'),
+                        grammar_feedback=grading_result.get('grammar_feedback'),
+                        pronunciation_hint=grading_result.get('pronunciation_hint'),
+                        transcript=transcript,
+                        language_code=self.language_code,
+                        category=category,
+                    )
+                    record_result = record_tool.run()
+                    
+                    # Log grading activity for admin monitoring
+                    try:
+                        from utils.activity_logger import ActivityLogger
+                        ActivityLogger.log_grading(
+                            candidate_id=self.candidate_id,
+                            word_title=word_title,
+                            score=grading_result["grade"],
+                            transcript=transcript,
+                            feedback={
+                                "accuracy": grading_result.get("accuracy_feedback"),
+                                "grammar": grading_result.get("grammar_feedback"),
+                                "pronunciation": grading_result.get("pronunciation_hint"),
+                            }
+                        )
+                    except Exception:
+                        pass  # Don't fail if logging fails
+                except Exception as e:
+                    # Log error but don't fail the main operation
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Failed to record performance: {e}")
+
             # Format response
             result = f"=== Language Coaching Result ===\n"
             result += f"Candidate: {candidate.full_name} ({self.candidate_id})\n\n"
@@ -389,7 +461,7 @@ This is a response to a Socratic question about Japanese caregiving. The candida
             result += "**🎤 Transcribed Response:**\n"
             result += f"{transcript}\n\n"
             
-            result += "**📊 AI Grading (Gemini 1.5 Flash):**\n"
+            result += "**📊 AI Grading (Gemini 2.5 Flash):**\n"
             result += f"**Overall Grade: {grading_result['grade']}/10**\n\n"
             
             result += "**✅ Accuracy Feedback:**\n"
@@ -402,6 +474,8 @@ This is a response to a Socratic question about Japanese caregiving. The candida
             result += f"{grading_result['pronunciation_hint']}\n\n"
             
             result += f"✓ Results saved to database (dialogue_history)."
+            if word_title:
+                result += f"\n✓ Performance recorded in Memory Layer (student_performance)."
 
             return result
 

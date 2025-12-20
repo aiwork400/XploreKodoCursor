@@ -31,8 +31,8 @@ google-cloud-texttospeech>=2.16.0
 # Google Cloud Speech-to-Text (for Language Coaching)
 google-cloud-speech>=2.23.0
 
-# Google Generative AI (Gemini) for AI Grading
-google-generativeai>=0.3.0
+# Google Generative AI (Gemini) for AI Grading - New SDK
+google-genai>=0.2.0
 
 # Streamlit Mic Recorder (for audio recording in dashboard)
 streamlit-mic-recorder>=0.0.8

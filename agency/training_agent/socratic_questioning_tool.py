@@ -19,10 +19,19 @@ from typing import Literal, Optional
 
 from agency_swarm.tools import BaseTool
 from pydantic import Field
+from sqlalchemy import not_
 from sqlalchemy.orm import Session
 
 import config
-from database.db_manager import Candidate, CurriculumProgress, KnowledgeBase, SessionLocal
+from database.db_manager import Candidate, CurriculumProgress, KnowledgeBase, SessionLocal, StudentPerformance
+
+# Try to import GetCurrentPhase for phase-based selection
+try:
+    from agency.student_progress_agent.tools import GetCurrentPhase
+    PHASE_TOOL_AVAILABLE = True
+except ImportError:
+    PHASE_TOOL_AVAILABLE = False
+    GetCurrentPhase = None
 
 # Try to import google-cloud-translate, fallback to placeholder if not available
 try:
@@ -300,35 +309,192 @@ class SocraticQuestioningTool(BaseTool):
             },
         ]
 
-    def _get_random_concept_from_knowledge_base(self, db: Session) -> Optional[dict]:
+    def _get_current_phase(self, candidate_id: str, db: Session) -> dict:
         """
-        Get a random caregiving concept from the knowledge base.
+        Get current phase information for the candidate.
+        
+        Returns:
+            dict with current_phase, phase_unlocked, next_phase_progress, metrics
+        """
+        if not PHASE_TOOL_AVAILABLE or not candidate_id:
+            return {"current_phase": 1, "phase_unlocked": [True, False, False]}
+        
+        try:
+            phase_tool = GetCurrentPhase(candidate_id=candidate_id)
+            phase_result = phase_tool.run()
+            
+            # Parse JSON result
+            import json
+            return json.loads(phase_result)
+        except Exception:
+            # Fallback to Phase 1
+            return {"current_phase": 1, "phase_unlocked": [True, False, False]}
+
+    def _get_phase_appropriate_categories(self, current_phase: int) -> list[str]:
+        """
+        Get categories appropriate for the current phase.
+        
+        Phase 1: jlpt_n5_vocabulary
+        Phase 2: caregiving_vocabulary
+        Phase 3: caregiving_vocabulary (advanced scenarios)
+        """
+        if current_phase == 1:
+            return ["jlpt_n5_vocabulary"]
+        elif current_phase == 2:
+            return ["caregiving_vocabulary"]
+        else:  # Phase 3
+            return ["caregiving_vocabulary"]  # Can add more advanced categories later
+
+    def _get_random_concept_from_knowledge_base(
+        self, 
+        db: Session, 
+        candidate_id: Optional[str] = None,
+        session_question_count: int = 0
+    ) -> Optional[dict]:
+        """
+        Get a concept from the knowledge base using Gated Progression and RAG-based prioritization.
+        
+        Gated Progression Logic:
+        - Phase 1: Only jlpt_n5_vocabulary
+        - Phase 2: caregiving_vocabulary (unlocked when N5 avg ≥ 6.0 AND 20+ words)
+        - Phase 3: Advanced caregiving (unlocked when caregiving avg ≥ 7.5)
+        
+        Smart Review (70/30 Split):
+        - 70% New words from current Phase
+        - 30% Weak words from previous Phases (Review)
         
         Returns a concept that can be used to generate a Socratic question.
         """
-        # Get random concept from knowledge base
-        concepts = db.query(KnowledgeBase).filter(
-            KnowledgeBase.language == "ja"
-        ).all()
-        
-        if not concepts:
+        if not candidate_id:
+            # No candidate ID - fallback to random
+            concepts = db.query(KnowledgeBase).filter(KnowledgeBase.language == "ja").all()
+            if concepts:
+                concept = random.choice(concepts)
+                content = concept.concept_content
+                first_sentence = content.split('。')[0] if '。' in content else content[:200]
+                return {
+                    "concept_title": concept.concept_title,
+                    "concept_content": first_sentence,
+                    "full_content": content,
+                    "source_file": concept.source_file,
+                    "page_number": concept.page_number,
+                    "rag_priority": "random",
+                }
             return None
         
-        # Select random concept
-        concept = random.choice(concepts)
+        # Get current phase
+        phase_info = self._get_current_phase(candidate_id, db)
+        current_phase = phase_info.get("current_phase", 1)
+        phase_unlocked = phase_info.get("phase_unlocked", [True, False, False])
         
-        # Extract key information for Socratic questioning
-        # Use first sentence or first 200 chars as the concept focus
-        content = concept.concept_content
-        first_sentence = content.split('。')[0] if '。' in content else content[:200]
+        # Get performance records
+        performances = db.query(StudentPerformance).filter(
+            StudentPerformance.candidate_id == candidate_id
+        ).all()
         
-        return {
-            "concept_title": concept.concept_title,
-            "concept_content": first_sentence,
-            "full_content": content,
-            "source_file": concept.source_file,
-            "page_number": concept.page_number,
-        }
+        attempted_word_titles = {perf.word_title for perf in performances if perf.word_title}
+        weak_word_titles = {perf.word_title for perf in performances if perf.word_title and perf.score < 6}
+        
+        # Determine if this should be a review question (30% chance)
+        is_review = (session_question_count % 10) < 3  # 30% of questions
+        
+        if is_review and weak_word_titles:
+            # 30% Review: Select from weak words from previous phases
+            # Get weak words from previous phase categories
+            prev_phase_categories = []
+            if current_phase >= 2:
+                prev_phase_categories.append("jlpt_n5_vocabulary")
+            if current_phase >= 3:
+                prev_phase_categories.append("caregiving_vocabulary")
+            
+            if prev_phase_categories:
+                review_concepts = db.query(KnowledgeBase).filter(
+                    KnowledgeBase.language == "ja",
+                    KnowledgeBase.concept_title.in_(weak_word_titles),
+                    KnowledgeBase.category.in_(prev_phase_categories)
+                ).all()
+                
+                if review_concepts:
+                    concept = random.choice(review_concepts)
+                    content = concept.concept_content
+                    first_sentence = content.split('。')[0] if '。' in content else content[:200]
+                    return {
+                        "concept_title": concept.concept_title,
+                        "concept_content": first_sentence,
+                        "full_content": content,
+                        "source_file": concept.source_file,
+                        "page_number": concept.page_number,
+                        "rag_priority": "review_weak",
+                    }
+        
+        # 70% New: Select from current phase categories
+        phase_categories = self._get_phase_appropriate_categories(current_phase)
+        
+        # Get concepts from current phase that haven't been attempted
+        query = db.query(KnowledgeBase).filter(
+            KnowledgeBase.language == "ja",
+            KnowledgeBase.category.in_(phase_categories)
+        )
+        
+        if attempted_word_titles:
+            query = query.filter(not_(KnowledgeBase.concept_title.in_(attempted_word_titles)))
+        
+        new_concepts = query.all()
+        
+        if new_concepts:
+            concept = random.choice(new_concepts)
+            content = concept.concept_content
+            first_sentence = content.split('。')[0] if '。' in content else content[:200]
+            return {
+                "concept_title": concept.concept_title,
+                "concept_content": first_sentence,
+                "full_content": content,
+                "source_file": concept.source_file,
+                "page_number": concept.page_number,
+                "rag_priority": "new_phase",
+            }
+        
+        # Fallback: If no new words, try weak words from current phase
+        if weak_word_titles:
+            weak_concepts = db.query(KnowledgeBase).filter(
+                KnowledgeBase.language == "ja",
+                KnowledgeBase.category.in_(phase_categories),
+                KnowledgeBase.concept_title.in_(weak_word_titles)
+            ).all()
+            
+            if weak_concepts:
+                concept = random.choice(weak_concepts)
+                content = concept.concept_content
+                first_sentence = content.split('。')[0] if '。' in content else content[:200]
+                return {
+                    "concept_title": concept.concept_title,
+                    "concept_content": first_sentence,
+                    "full_content": content,
+                    "source_file": concept.source_file,
+                    "page_number": concept.page_number,
+                    "rag_priority": "weak_current_phase",
+                }
+        
+        # Final fallback: Any word from current phase
+        all_phase_concepts = db.query(KnowledgeBase).filter(
+            KnowledgeBase.language == "ja",
+            KnowledgeBase.category.in_(phase_categories)
+        ).all()
+        
+        if all_phase_concepts:
+            concept = random.choice(all_phase_concepts)
+            content = concept.concept_content
+            first_sentence = content.split('。')[0] if '。' in content else content[:200]
+            return {
+                "concept_title": concept.concept_title,
+                "concept_content": first_sentence,
+                "full_content": content,
+                "source_file": concept.source_file,
+                "page_number": concept.page_number,
+                "rag_priority": "fallback",
+            }
+        
+        return None
 
     def _generate_socratic_question_from_concept(self, concept: dict) -> dict:
         """
@@ -359,8 +525,24 @@ class SocraticQuestioningTool(BaseTool):
         Otherwise, use predefined questions for 'omotenashi'.
         """
         # Try to get from knowledge base first (if available)
+        # Use Gated Progression and RAG-based prioritization with candidate_id
         if db:
-            concept = self._get_random_concept_from_knowledge_base(db)
+            # Get current question index for 70/30 split calculation
+            dialogue_history = []
+            if hasattr(self, 'candidate_id'):
+                curriculum = db.query(CurriculumProgress).filter(
+                    CurriculumProgress.candidate_id == self.candidate_id
+                ).first()
+                if curriculum:
+                    dialogue_history = curriculum.dialogue_history or []
+            
+            session_question_count = len(dialogue_history)
+            
+            concept = self._get_random_concept_from_knowledge_base(
+                db, 
+                candidate_id=self.candidate_id if hasattr(self, 'candidate_id') else None,
+                session_question_count=session_question_count
+            )
             if concept:
                 return self._generate_socratic_question_from_concept(concept)
         

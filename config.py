@@ -58,5 +58,8 @@ GOOGLE_CLOUD_TRANSLATE_CREDENTIALS_PATH = os.getenv("GOOGLE_CLOUD_TRANSLATE_CRED
 # Google Gemini API (for AI Grading in Language Coaching)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
+# Google Cloud Application Credentials (for Speech-to-Text, TTS, etc.)
+GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+
 # Security
 SECRET_KEY = os.getenv("SECRET_KEY", "change-this-in-production")
