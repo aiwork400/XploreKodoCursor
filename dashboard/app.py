@@ -18,6 +18,7 @@ project_root = str(Path(__file__).parent.parent.resolve())
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+import base64
 import pandas as pd
 import streamlit as st
 from sqlalchemy import or_, text
@@ -273,6 +274,234 @@ def load_financial_summary() -> dict:
         db.close()
 
 
+# Concierge Widget Functions
+def show_concierge_widget():
+    """Display the XploreKodo Concierge Widget - floating sidebar assistant."""
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🤖 XploreKodo Concierge")
+    
+    # Initialize session state for concierge
+    if "concierge_language" not in st.session_state:
+        st.session_state.concierge_language = "en"
+    if "concierge_avatar_visible" not in st.session_state:
+        st.session_state.concierge_avatar_visible = True
+    if "concierge_messages" not in st.session_state:
+        st.session_state.concierge_messages = []
+    
+    # Language Selector
+    language_options = {
+        'en': '🇺🇸 English',
+        'ja': '🇯🇵 日本語',
+        'ne': '🇳🇵 नेपाली'
+    }
+    
+    selected_lang = st.sidebar.selectbox(
+        "🌐 Language",
+        options=list(language_options.keys()),
+        format_func=lambda x: language_options[x],
+        key="concierge_lang_select",
+        index=list(language_options.keys()).index(st.session_state.concierge_language) if st.session_state.concierge_language in language_options else 0
+    )
+    st.session_state.concierge_language = selected_lang
+    
+    # Avatar Toggle
+    st.session_state.concierge_avatar_visible = st.sidebar.checkbox(
+        "👨‍🏫 Show Avatar",
+        value=st.session_state.concierge_avatar_visible,
+        key="concierge_avatar_toggle"
+    )
+    
+    st.sidebar.markdown("---")
+    
+    # Display conversation history
+    if st.session_state.concierge_messages:
+        st.sidebar.markdown("**💬 Conversation:**")
+        for msg in st.session_state.concierge_messages[-3:]:  # Show last 3 messages
+            if msg["role"] == "user":
+                st.sidebar.markdown(f"**You:** {msg['content'][:50]}...")
+            else:
+                st.sidebar.markdown(f"**Concierge:** {msg['content'][:50]}...")
+    
+    st.sidebar.markdown("---")
+    
+    # Hybrid Input: Chat + Mic Recorder
+    input_method = st.sidebar.radio(
+        "Input Method",
+        ["💬 Text", "🎤 Voice"],
+        key="concierge_input_method",
+        horizontal=True
+    )
+    
+    user_input = None
+    
+    if input_method == "💬 Text":
+        # Text input using st.chat_input
+        user_input = st.sidebar.chat_input(
+            "Ask the Concierge...",
+            key="concierge_chat_input"
+        )
+    else:
+        # Voice input using streamlit-mic-recorder
+        try:
+            from streamlit_mic_recorder import mic_recorder
+            
+            audio_data = mic_recorder(
+                key="concierge_voice_recorder",
+                start_prompt="🎤 Record",
+                stop_prompt="⏹️ Stop",
+                just_once=False,
+                use_container_width=True,
+            )
+            
+            if audio_data:
+                st.sidebar.audio(audio_data["bytes"], format="audio/wav")
+                
+                # Process voice input
+                if st.sidebar.button("📤 Send Voice", key="concierge_send_voice"):
+                    user_input = process_concierge_voice(
+                        audio_data["bytes"],
+                        st.session_state.concierge_language
+                    )
+        except ImportError:
+            st.sidebar.warning("⚠️ Install streamlit-mic-recorder for voice input")
+            user_input = st.sidebar.text_input("Or type your message:", key="concierge_fallback_input")
+    
+    # Process user input
+    if user_input:
+        # Add user message
+        st.session_state.concierge_messages.append({
+            "role": "user",
+            "content": user_input
+        })
+        
+        # Get response from SupportAgent
+        response = get_concierge_response(user_input, st.session_state.concierge_language)
+        
+        # Add assistant message
+        st.session_state.concierge_messages.append({
+            "role": "assistant",
+            "content": response
+        })
+        
+        # Generate TTS audio if avatar is visible
+        if st.session_state.concierge_avatar_visible:
+            audio_output = generate_trilingual_tts(response, st.session_state.concierge_language)
+            if audio_output:
+                st.sidebar.audio(audio_output, format="audio/mp3")
+        
+        st.sidebar.rerun()
+
+
+def process_concierge_voice(audio_bytes: bytes, language: str) -> str:
+    """Process voice input for concierge widget."""
+    try:
+        from agency.training_agent.language_coaching_tool import LanguageCoachingTool
+        
+        # Convert audio to base64
+        audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
+        
+        # Determine language code for transcription
+        language_codes = {
+            'en': 'en-US',
+            'ja': 'ja-JP',
+            'ne': 'ne-NP'
+        }
+        lang_code = language_codes.get(language, 'en-US')
+        
+        # Use LanguageCoachingTool for transcription
+        transcript_tool = LanguageCoachingTool(
+            candidate_id="concierge_user",  # Placeholder
+            audio_base64=audio_base64,
+            expected_answer="",
+            question_type="conversation"
+        )
+        
+        result = transcript_tool.run()
+        
+        # Extract transcript
+        if "Transcript:" in result:
+            transcript = result.split("Transcript:")[1].split("\n")[0].strip()
+            return transcript
+        
+        return "Could not transcribe audio. Please try again."
+    except Exception as e:
+        return f"Error processing voice: {str(e)}"
+
+
+def get_concierge_response(user_input: str, language: str) -> str:
+    """Get response from SupportAgent for concierge widget."""
+    try:
+        from agency.support_agent.support_agent import SupportAgent
+        from agency.support_agent.tools import GetLifeInJapanAdvice
+        from agency.support_agent.navigation_tool import NavigateToPage
+        
+        # Initialize SupportAgent
+        support_agent = SupportAgent()
+        
+        # Check if user wants to navigate
+        navigation_keywords = ["go to", "take me to", "show me", "navigate to", "open"]
+        if any(keyword in user_input.lower() for keyword in navigation_keywords):
+            # Use navigation tool
+            nav_tool = NavigateToPage(page_name=user_input, reason=f"User requested navigation: {user_input}")
+            return nav_tool.run()
+        
+        # Otherwise, use GetLifeInJapanAdvice
+        advice_tool = GetLifeInJapanAdvice(
+            query=user_input,
+            language=language
+        )
+        return advice_tool.run()
+        
+    except Exception as e:
+        return f"I apologize, but I encountered an error: {str(e)}. Please try rephrasing your question."
+
+
+def generate_trilingual_tts(text: str, language: str) -> bytes | None:
+    """Generate TTS audio in the specified language."""
+    try:
+        from google.cloud import texttospeech
+        import config
+        
+        tts_client = texttospeech.TextToSpeechClient()
+        
+        synthesis_input = texttospeech.SynthesisInput(text=text)
+        
+        # Get voice based on language
+        voice_name = config.LANGUAGE_TTS_VOICES.get(language, 'en-US-Neural2-C')
+        
+        # Determine language code
+        lang_codes = {
+            'en': 'en-US',
+            'ja': 'ja-JP',
+            'ne': 'ne-NP'
+        }
+        lang_code = lang_codes.get(language, 'en-US')
+        
+        voice = texttospeech.VoiceSelectionParams(
+            language_code=lang_code,
+            name=voice_name,
+            ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL
+        )
+        
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3,
+            speaking_rate=1.0,
+            pitch=0.0
+        )
+        
+        tts_response = tts_client.synthesize_speech(
+            input=synthesis_input,
+            voice=voice,
+            audio_config=audio_config
+        )
+        
+        return tts_response.audio_content
+        
+    except Exception as e:
+        st.sidebar.warning(f"TTS unavailable: {str(e)}")
+        return None
+
+
 # Main App
 def main():
     """Main Streamlit app."""
@@ -294,7 +523,7 @@ def main():
         except Exception:
             pass
     
-    page_options = ["Candidate View", "Wisdom Hub", "Live Simulator", "Financial Ledger", "Compliance"]
+    page_options = ["Candidate View", "Wisdom Hub", "Live Simulator", "Financial Ledger", "Compliance", "Life-in-Japan Support", "Virtual Classroom"]
     if admin_mode:
         page_options.append("Admin Dashboard")
     
@@ -302,6 +531,9 @@ def main():
         "Select View",
         page_options,
     )
+    
+    # Show Concierge Widget (after page selection to avoid conflicts)
+    show_concierge_widget()
 
     if page == "Candidate View":
         show_candidate_view()
@@ -315,6 +547,13 @@ def main():
         show_compliance_view()
     elif page == "Life-in-Japan Support":
         show_support_hub()
+    elif page == "Virtual Classroom":
+        # Import and show virtual classroom page
+        try:
+            from dashboard.pages.virtual_classroom import main as show_virtual_classroom
+            show_virtual_classroom()
+        except ImportError:
+            st.error("Virtual Classroom page not found. Please ensure dashboard/pages/virtual_classroom.py exists.")
     elif page == "Admin Dashboard":
         if admin_mode:
             show_admin_dashboard()

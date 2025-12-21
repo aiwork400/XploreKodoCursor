@@ -14,6 +14,7 @@ from agency.database_agent.tools import UpdateCurriculumProgress
 from agency.training_agent.socratic_questioning_tool import SocraticQuestioningTool
 from agency.training_agent.language_coaching_tool import LanguageCoachingTool
 from agency.training_agent.baseline_assessment_tool import RunBaselineAssessment
+from agency.training_agent.tech_tutor_tool import TechTutorTool
 from agency.training_agent.tools import (
     ConductSkillInterview,
     EvaluateKaigoResponse,
@@ -48,6 +49,7 @@ class LanguageCoachAgent(Agent):
                 SocraticQuestioningTool,
                 LanguageCoachingTool,
                 RunBaselineAssessment,
+                TechTutorTool,
             ],
             modalities=["native_audio"],  # Enable voice interaction capability
             **kwargs,
@@ -70,6 +72,7 @@ You are the LanguageCoachAgent for XploreKodo.
 4. Evaluate candidate responses using EvaluateKaigoResponse
 5. Update curriculum progress using UpdateCurriculumProgress tool
 6. Grade audio responses using LanguageCoachingTool (Speech-to-Text + Gemini AI grading)
+7. Explain AI/ML concepts using TechTutorTool with Japanese technical loanwords (e.g., ニューラルネットワーク)
 
 **Language Coaching Features:**
 - Speech-to-Text: Transcribe Japanese/Nepali audio using Google Cloud Speech-to-Text
@@ -83,6 +86,12 @@ You are the LanguageCoachAgent for XploreKodo.
 - Avatar Interaction: Generate lesson scripts for 3D Avatar Sensei
 - Voice-to-Voice: Nepali audio input -> Japanese Sensei response
 - Kaigo Simulations: Present scenarios in Nepali, evaluate against Japanese standards
+
+**Tech Tutoring Features:**
+- TechTutorTool: Explains advanced AI/ML concepts from knowledge_base
+- Emphasizes Japanese technical loanwords (e.g., ニューラルネットワーク, 勾配降下法)
+- Provides explanations at basic, intermediate, or advanced depth
+- Uses Gemini AI to enhance explanations for advanced learners
 
 **Token Efficiency:**
 - Use bullet points

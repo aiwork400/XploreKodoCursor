@@ -11,6 +11,7 @@ from pathlib import Path
 from agency_swarm import Agent
 
 from agency.support_agent.tools import GetLifeInJapanAdvice
+from agency.support_agent.navigation_tool import NavigateToPage
 
 
 class SupportAgent(Agent):
@@ -32,6 +33,7 @@ class SupportAgent(Agent):
             instructions=self.get_instructions(),
             tools=[
                 GetLifeInJapanAdvice,
+                NavigateToPage,
             ],
             **kwargs,
         )

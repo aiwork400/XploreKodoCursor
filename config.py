@@ -27,6 +27,23 @@ VISA_MODES = os.getenv("VISA_MODES", "Student,SSW_Caregiver,Skilled_Worker").spl
 # Trilingual Support
 TRILINGUAL_SUPPORT = os.getenv("TRILINGUAL_SUPPORT", "Nepali,Japanese,English").split(",")
 
+# Supported Languages (ISO 639-1 codes)
+SUPPORTED_LANGUAGES = ['en', 'ja', 'ne']  # English, Japanese, Nepali
+
+# Language to TTS Voice Mapping
+LANGUAGE_TTS_VOICES = {
+    'en': 'en-US-Neural2-C',  # English (US)
+    'ja': 'ja-JP-Neural2-C',  # Japanese
+    'ne': 'ne-NP-Wavenet-A',  # Nepali
+}
+
+# Language Display Names
+LANGUAGE_NAMES = {
+    'en': 'English',
+    'ja': '日本語 (Japanese)',
+    'ne': 'नेपाली (Nepali)',
+}
+
 # Database Configuration
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
