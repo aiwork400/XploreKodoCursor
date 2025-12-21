@@ -49,6 +49,7 @@ class LanguageCoachAgent(Agent):
                 LanguageCoachingTool,
                 RunBaselineAssessment,
             ],
+            modalities=["native_audio"],  # Enable voice interaction capability
             **kwargs,
         )
 
