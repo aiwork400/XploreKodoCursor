@@ -128,6 +128,10 @@ class CurriculumProgress(Base):
     # Stores all Socratic questioning interactions: [{"question": {...}, "answer": "...", "timestamp": "..."}, ...]
     dialogue_history = Column(JSON, nullable=True)
 
+    # Baseline Assessment Results (JSON)
+    # Stores initial 5-question assessment results: {"assessment_date": "...", "overall_score": ..., "questions": [...]}
+    baseline_assessment_results = Column(JSON, nullable=True)
+
     # Timestamps
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
@@ -211,6 +215,22 @@ class ActivityLog(Base):
 
     def __repr__(self):
         return f"<ActivityLog(id={self.id}, event_type={self.event_type}, severity={self.severity}, timestamp={self.timestamp})>"
+
+
+class LifeInJapanKB(Base):
+    """Life in Japan knowledge base - stores legal/personal advice for SupportAgent."""
+
+    __tablename__ = "life_in_japan_kb"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    topic = Column(String(200), nullable=False)  # e.g., 'visa_renewal', 'banking', 'healthcare'
+    category = Column(String(100), nullable=True)  # e.g., 'legal', 'personal', 'financial', 'healthcare'
+    title = Column(String(500), nullable=False)  # Question or topic title
+    content = Column(Text, nullable=False)  # Detailed answer/advice
+    language = Column(String(10), default="en", nullable=False)  # 'en', 'ja', 'ne'
+    source = Column(String(200), nullable=True)  # Source of information
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
 
 # Database session management

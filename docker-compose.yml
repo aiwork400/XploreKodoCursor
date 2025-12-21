@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service
+  postgres:
+    image: postgres:16-alpine
+    container_name: xplorekodo_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-xplorekodo}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/migration_add_activity_logs.sql:/docker-entrypoint-initdb.d/01_activity_logs.sql
+      - ./database/migration_add_student_performance.sql:/docker-entrypoint-initdb.d/02_student_performance.sql
+      - ./database/migration_add_baseline_assessment.sql:/docker-entrypoint-initdb.d/03_baseline_assessment.sql
+      - ./database/migration_add_life_in_japan_kb.sql:/docker-entrypoint-initdb.d/04_life_in_japan_kb.sql
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - xplorekodo_network
+
+  # Streamlit Dashboard Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: xplorekodo_app
+    environment:
+      # Database Configuration
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-xplorekodo}
+      
+      # Google Cloud Credentials
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/app/google_creds.json}
+      GOOGLE_CLOUD_TRANSLATE_PROJECT_ID: ${GOOGLE_CLOUD_TRANSLATE_PROJECT_ID:-}
+      GOOGLE_CLOUD_TRANSLATE_CREDENTIALS_PATH: ${GOOGLE_CLOUD_TRANSLATE_CREDENTIALS_PATH:-}
+      
+      # API Keys
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      
+      # Application Flags
+      PHASE_2_ENABLED: ${PHASE_2_ENABLED:-False}
+      DEBUG: ${DEBUG:-False}
+      GRADING_STANDARD: ${GRADING_STANDARD:-XPLOREKODO_STRICT}
+      
+      # Security
+      SECRET_KEY: ${SECRET_KEY:-change-this-in-production}
+    volumes:
+      # Mount credentials (if provided)
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-./google_creds.json}:/app/google_creds.json:ro
+      # Mount operations reports directory
+      - ./operations/reports:/app/operations/reports
+      # Mount static assets
+      - ./static:/app/static
+      # Mount media directory
+      - ./media:/app/media
+    ports:
+      - "${STREAMLIT_PORT:-8501}:8501"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - xplorekodo_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+    driver: local
+    name: xplorekodo_postgres_data
+
+networks:
+  xplorekodo_network:
+    driver: bridge
+    name: xplorekodo_network
+

@@ -13,6 +13,7 @@ from agency_swarm import Agent
 from agency.database_agent.tools import UpdateCurriculumProgress
 from agency.training_agent.socratic_questioning_tool import SocraticQuestioningTool
 from agency.training_agent.language_coaching_tool import LanguageCoachingTool
+from agency.training_agent.baseline_assessment_tool import RunBaselineAssessment
 from agency.training_agent.tools import (
     ConductSkillInterview,
     EvaluateKaigoResponse,
@@ -46,6 +47,7 @@ class LanguageCoachAgent(Agent):
                 EvaluateKaigoResponse,
                 SocraticQuestioningTool,
                 LanguageCoachingTool,
+                RunBaselineAssessment,
             ],
             **kwargs,
         )

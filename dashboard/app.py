@@ -42,27 +42,27 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Custom CSS
-st.markdown(
-    """
-    <style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #1f77b4;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    .metric-card {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin: 0.5rem 0;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+# Load Custom CSS
+css_path = Path(__file__).parent.parent / "assets" / "style.css"
+if css_path.exists():
+    with open(css_path, "r", encoding="utf-8") as f:
+        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+else:
+    # Fallback CSS if file doesn't exist
+    st.markdown(
+        """
+        <style>
+        .main-header {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #002147;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def get_db_session() -> Session:
@@ -313,6 +313,8 @@ def main():
         show_financial_ledger()
     elif page == "Compliance":
         show_compliance_view()
+    elif page == "Life-in-Japan Support":
+        show_support_hub()
     elif page == "Admin Dashboard":
         if admin_mode:
             show_admin_dashboard()
@@ -446,6 +448,10 @@ def show_candidate_view():
                                     else 0,
                                     text=f"JLPT N4: {curriculum.jlpt_n4_units_completed}/{curriculum.jlpt_n4_total_units} units",
                                 )
+                                
+                                # Goal Tracker - Adaptive Level Indicator
+                                st.markdown("---")
+                                show_goal_tracker(selected_id)
                                 
                                 # Show Phase Unlock Progress
                                 st.markdown("---")
@@ -1028,16 +1034,59 @@ def show_socratic_history(dialogue_history: list | None, candidate_id: str):
 
 def show_admin_dashboard():
     """Display Admin Monitoring Center dashboard."""
-    st.header("🛡️ Admin Monitoring Center")
-    
     # Check admin mode (double check)
     if not st.session_state.get("admin_mode", False):
         st.error("🔒 Admin Mode must be enabled to access this page.")
         return
     
+    # System Health & Security Strip
+    st.markdown(
+        """
+        <div class="system-health-strip">
+            <h2>🛡️ System Health & Security</h2>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    st.header("Admin Monitoring Center")
+    
+    # Platform Mode Toggle (Training Mode vs Official Test-Cell Mode)
+    st.markdown("---")
+    st.subheader("🎛️ Platform Mode Configuration")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        platform_mode = st.radio(
+            "Select Platform Mode",
+            ["Training Mode", "Official Test-Cell Mode"],
+            key="platform_mode",
+            help="Training Mode: Standard learning environment. Official Test-Cell Mode: Strict assessment environment with enhanced security."
+        )
+    
+    with col2:
+        if platform_mode == "Training Mode":
+            st.info("📚 **Training Mode Active**\n\n- Standard grading thresholds\n- Learning-focused feedback\n- Practice sessions enabled")
+        else:
+            st.warning("🔒 **Official Test-Cell Mode Active**\n\n- Strict grading standards (XPLOREKODO_STRICT)\n- Enhanced security measures\n- Official assessment environment")
+    
+    # Store mode in session state
+    st.session_state.platform_mode = platform_mode
+    
+    # Display current grading standard
+    st.markdown(f"**Current Grading Standard:** `{config.GRADING_STANDARD}`")
+    if config.GRADING_STANDARD == "XPLOREKODO_STRICT":
+        st.caption("⚠️ Strict grading enabled: 15% harder threshold than JLPT standard")
+    else:
+        st.caption("ℹ️ Standard JLPT grading thresholds")
+    
+    st.markdown("---")
+    
     # Get critical logs for notification badge
+    db = get_db_session()
     try:
         from utils.activity_logger import ActivityLogger
+        from database.db_manager import ActivityLog
         
         critical_logs = ActivityLogger.get_recent_critical_logs(hours=1)
         
@@ -1064,6 +1113,132 @@ def show_admin_dashboard():
                 st.markdown("---")
         else:
             st.success("✅ No critical events in the last hour. System is running smoothly.")
+        
+        st.markdown("---")
+        
+        # Cheating Risk Visualizer Section
+        st.subheader("🚨 Cheating Risk Monitor")
+        
+        # Get cheating risk events
+        db_risk = get_db_session()
+        try:
+            from database.db_manager import ActivityLog
+            cheating_risk_logs = db_risk.query(ActivityLog).filter(
+                ActivityLog.event_type == "Cheating_Risk",
+                ActivityLog.severity == "Warning"
+            ).order_by(ActivityLog.timestamp.desc()).limit(5).all()
+        except Exception as e:
+            st.warning(f"Could not load cheating risk logs: {str(e)}")
+            cheating_risk_logs = []
+        
+        if cheating_risk_logs:
+            st.markdown(
+                '<div class="cheating-risk-section">',
+                unsafe_allow_html=True
+            )
+            
+            # Scrollable list container
+            st.markdown('<div class="scrollable-list">', unsafe_allow_html=True)
+            
+            for log in cheating_risk_logs:
+                metadata = log.event_metadata or {}
+                risk_score = metadata.get("cheating_risk_score", 0)
+                
+                # Determine risk level
+                if risk_score >= 80:
+                    risk_class = "high"
+                    risk_label = "HIGH"
+                elif risk_score >= 70:
+                    risk_class = "medium"
+                    risk_label = "MEDIUM"
+                else:
+                    risk_class = "low"
+                    risk_label = "LOW"
+                
+                indicators = metadata.get("indicators", [])
+                
+                st.markdown(
+                    f"""
+                    <div class="risk-event-card">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <strong style="color: #D32F2F;">🚨 Cheating Risk Detected</strong>
+                            <span class="risk-score {risk_class}">{risk_label}: {risk_score}/100</span>
+                        </div>
+                        <div style="color: #757575; font-size: 0.875rem; margin-bottom: 0.5rem;">
+                            <strong>Time:</strong> {log.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC')}<br>
+                            <strong>User:</strong> {log.user_id or 'System'}<br>
+                            <strong>Question:</strong> {metadata.get('question_type', 'N/A')} (Q{metadata.get('question_number', 'N/A')})
+                        </div>
+                        <div style="color: #212121; margin-top: 0.5rem;">
+                            <strong>Indicators:</strong>
+                            <ul style="margin: 0.25rem 0; padding-left: 1.5rem;">
+                                {''.join([f'<li>{ind}</li>' for ind in indicators[:3]])}
+                            </ul>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            
+            st.markdown('</div>', unsafe_allow_html=True)  # Close scrollable-list
+            st.markdown('</div>', unsafe_allow_html=True)  # Close cheating-risk-section
+        else:
+            st.info("✅ No high-risk cheating events detected in recent assessments.")
+        finally:
+            if 'db_risk' in locals():
+                db_risk.close()
+        
+        st.markdown("---")
+        
+        # Curriculum Distribution Chart
+        st.subheader("📊 Curriculum Distribution")
+        
+        db_curriculum = get_db_session()
+        try:
+            from database.db_manager import KnowledgeBase
+            
+            # Get word counts by category
+            categories = db.query(KnowledgeBase.category).distinct().all()
+            category_counts = {}
+            
+            for (category,) in categories:
+                if category:
+                    count = db.query(KnowledgeBase).filter(
+                        KnowledgeBase.category == category
+                    ).count()
+                    category_counts[category] = count
+            
+            if category_counts:
+                # Group into tracks
+                caregiving_count = category_counts.get("caregiving_vocabulary", 0)
+                academic_count = category_counts.get("jlpt_n5_vocabulary", 0) + category_counts.get("jlpt_n4_vocabulary", 0)
+                tech_count = sum(count for cat, count in category_counts.items() if "tech" in cat.lower() or "ai" in cat.lower())
+                
+                # Create bar chart data
+                chart_data = pd.DataFrame({
+                    "Track": ["Caregiving", "Academic (N5/N4)", "Tech"],
+                    "Word Count": [caregiving_count, academic_count, tech_count]
+                })
+                
+                st.markdown('<div class="curriculum-chart-container">', unsafe_allow_html=True)
+                st.bar_chart(chart_data.set_index("Track"), use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Show breakdown
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Caregiving Words", caregiving_count)
+                with col2:
+                    st.metric("Academic Words", academic_count)
+                with col3:
+                    st.metric("Tech Words", tech_count)
+            else:
+                st.info("No curriculum data available. Seed the knowledge base to see distribution.")
+        except Exception as e:
+            st.warning(f"Could not load curriculum distribution: {str(e)}")
+        finally:
+            if 'db_curriculum' in locals():
+                db_curriculum.close()
         
         st.markdown("---")
         
@@ -1337,6 +1512,198 @@ def show_learning_curve(candidate_id: str):
         
     except Exception as e:
         st.error(f"Error loading learning curve: {str(e)}")
+    finally:
+        db.close()
+
+
+def show_goal_tracker(candidate_id: str):
+    """
+    Display Goal Tracker showing current JLPT level and progress to J-Standard+ certification.
+    """
+    if not PHASE_TOOL_AVAILABLE:
+        return
+    
+    try:
+        phase_tool = GetCurrentPhase(candidate_id=candidate_id)
+        phase_result = phase_tool.run()
+        
+        import json
+        phase_info = json.loads(phase_result)
+        
+        current_phase = phase_info.get("current_phase", 1)
+        metrics = phase_info.get("metrics", {})
+        
+        # Determine current JLPT level based on phase and performance
+        n5_avg = metrics.get("n5_avg", 0)
+        n5_count = metrics.get("n5_count", 0)
+        caregiving_avg = metrics.get("caregiving_avg", 0)
+        
+        # Map phase to JLPT level
+        if current_phase == 1:
+            current_level = "N5"
+            target_level = "N4"
+        elif current_phase == 2:
+            current_level = "N4"
+            target_level = "N3"
+        else:
+            current_level = "N3"
+            target_level = "J-Standard+"
+        
+        # Calculate progress to J-Standard+ (requires N3 mastery + caregiving proficiency)
+        # J-Standard+ = N3 average >= 8.0 AND caregiving average >= 7.5
+        j_standard_progress = 0
+        if n5_avg >= 6.0 and n5_count >= 20:
+            j_standard_progress += 33  # Phase 1 complete
+        if caregiving_avg >= 7.5:
+            j_standard_progress += 33  # Phase 2 complete
+        if current_phase == 3:
+            j_standard_progress = 100  # Phase 3 = J-Standard+
+        
+        st.markdown(
+            f"""
+            <div class="goal-tracker">
+                <div class="goal-tracker-header">
+                    <h3 class="goal-tracker-title">🎯 Goal Tracker: J-Standard+ Certification</h3>
+                    <span class="current-level-badge">Current: {current_level}</span>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar-label">
+                        <span>Progress to J-Standard+</span>
+                        <span>{j_standard_progress}%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-bar-fill" style="width: {j_standard_progress}%">
+                            {j_standard_progress}%
+                        </div>
+                    </div>
+                </div>
+                <div class="certification-milestones">
+                    <div class="milestone {'active' if n5_avg >= 6.0 and n5_count >= 20 else 'inactive'}">
+                        <div class="milestone-icon">📚</div>
+                        <div class="milestone-label">N5 Mastery<br>(20+ words, 6.0+ avg)</div>
+                    </div>
+                    <div class="milestone {'active' if caregiving_avg >= 7.5 else 'inactive'}">
+                        <div class="milestone-icon">🏥</div>
+                        <div class="milestone-label">Caregiving<br>(7.5+ avg)</div>
+                    </div>
+                    <div class="milestone {'active' if current_phase == 3 else 'inactive'}">
+                        <div class="milestone-icon">⭐</div>
+                        <div class="milestone-label">J-Standard+<br>Certified</div>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        # Show current metrics
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("N5 Average", f"{n5_avg:.1f}/10", f"{n5_count} words")
+        with col2:
+            st.metric("Caregiving Average", f"{caregiving_avg:.1f}/10" if caregiving_avg > 0 else "N/A")
+        with col3:
+            st.metric("Current Phase", f"Phase {current_phase}")
+            
+    except Exception as e:
+        st.warning(f"Could not load goal tracker: {str(e)}")
+
+
+def show_support_hub():
+    """Display Life-in-Japan Support Hub with interactive category cards."""
+    st.header("🇯🇵 Life-in-Japan Support Hub")
+    st.markdown("Get help with legal, financial, visa, housing, and emergency information.")
+    
+    db = get_db_session()
+    try:
+        from database.db_manager import LifeInJapanKB
+        
+        # Get all categories
+        categories = db.query(LifeInJapanKB.category).distinct().all()
+        category_list = [cat[0] for cat in categories if cat[0]]
+        
+        if not category_list:
+            st.info("No support categories available. Run the seed script to populate the knowledge base.")
+            return
+        
+        # Category icons and descriptions
+        category_info = {
+            "legal": {"icon": "⚖️", "title": "Legal Support", "description": "SSW rights, overtime laws, and legal advice"},
+            "financial": {"icon": "💰", "title": "Financial Services", "description": "Banking, accounts, and financial guidance"},
+            "visa": {"icon": "📋", "title": "Visa & Immigration", "description": "Visa transitions, renewals, and status changes"},
+            "housing": {"icon": "🏠", "title": "Housing Information", "description": "Rent, deposits, and housing tips"},
+            "emergency": {"icon": "🚨", "title": "Emergency Services", "description": "Medical emergencies, 119, and crisis protocols"}
+        }
+        
+        # Display category cards in a grid
+        st.markdown("### Select a Support Category")
+        
+        # Create 2 columns for card layout
+        col1, col2 = st.columns(2)
+        
+        for i, category in enumerate(category_list):
+            info = category_info.get(category, {"icon": "📄", "title": category.title(), "description": "Support information"})
+            
+            # Alternate between columns
+            with col1 if i % 2 == 0 else col2:
+                # Create clickable card
+                if st.button(
+                    f"{info['icon']} {info['title']}",
+                    key=f"support_card_{category}",
+                    use_container_width=True
+                ):
+                    st.session_state[f"selected_category_{category}"] = True
+                
+                st.caption(info['description'])
+                st.markdown("---")
+        
+        # Show content when category is selected
+        selected_category = None
+        for category in category_list:
+            if st.session_state.get(f"selected_category_{category}", False):
+                selected_category = category
+                break
+        
+        if selected_category:
+            st.markdown("---")
+            st.subheader(f"{category_info.get(selected_category, {}).get('icon', '📄')} {category_info.get(selected_category, {}).get('title', selected_category.title())}")
+            
+            # Get entries for this category
+            entries = db.query(LifeInJapanKB).filter(
+                LifeInJapanKB.category == selected_category
+            ).order_by(LifeInJapanKB.updated_at.desc()).all()
+            
+            if entries:
+                for entry in entries:
+                    with st.expander(f"**{entry.title}**"):
+                        st.markdown(entry.content)
+                        if entry.source:
+                            st.caption(f"Source: {entry.source}")
+            else:
+                st.info(f"No information available for {selected_category} category.")
+            
+            # Allow querying
+            st.markdown("---")
+            st.subheader("🔍 Search Support Knowledge Base")
+            query = st.text_input("Enter your question or keywords", key="support_query")
+            
+            if query:
+                try:
+                    from agency.support_agent.tools import GetLifeInJapanAdvice
+                    tool = GetLifeInJapanAdvice(
+                        query=query,
+                        category=selected_category,
+                        language="en"
+                    )
+                    result = tool.run()
+                    st.markdown(result)
+                except Exception as e:
+                    st.error(f"Error querying knowledge base: {str(e)}")
+        
+    except Exception as e:
+        st.error(f"Error loading support hub: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
     finally:
         db.close()
 

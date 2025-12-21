@@ -1,0 +1,361 @@
+/* XploreKodo All-in-One Platform - Professional Theme */
+
+:root {
+    --primary-color: #002147;
+    --danger-color: #D32F2F;
+    --success-color: #2E7D32;
+    --warning-color: #F57C00;
+    --info-color: #1976D2;
+    --background-light: #F5F5F5;
+    --text-primary: #212121;
+    --text-secondary: #757575;
+    --border-color: #E0E0E0;
+    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+/* Global Styles */
+.main {
+    background-color: var(--background-light);
+}
+
+/* Metric Cards */
+.metric-card {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 0.5rem 0;
+    box-shadow: var(--shadow-sm);
+    border-left: 4px solid var(--primary-color);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.metric-card.success {
+    border-left-color: var(--success-color);
+}
+
+.metric-card.danger {
+    border-left-color: var(--danger-color);
+}
+
+.metric-card.warning {
+    border-left-color: var(--warning-color);
+}
+
+.metric-card.info {
+    border-left-color: var(--info-color);
+}
+
+/* Container Cards */
+.stContainer {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1rem 0;
+    box-shadow: var(--shadow-sm);
+}
+
+/* System Health Strip */
+.system-health-strip {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #003366 100%);
+    color: white;
+    padding: 1rem 2rem;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow-md);
+}
+
+.system-health-strip h2 {
+    color: white;
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+/* Cheating Risk Section */
+.cheating-risk-section {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1rem 0;
+    box-shadow: var(--shadow-sm);
+    border-top: 3px solid var(--danger-color);
+}
+
+.risk-event-card {
+    background: #FFF5F5;
+    border-left: 4px solid var(--danger-color);
+    border-radius: 4px;
+    padding: 1rem;
+    margin: 0.75rem 0;
+    transition: background-color 0.2s;
+}
+
+.risk-event-card:hover {
+    background: #FFEBEE;
+}
+
+.risk-score {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+.risk-score.high {
+    background: #FFCDD2;
+    color: var(--danger-color);
+}
+
+.risk-score.medium {
+    background: #FFE0B2;
+    color: var(--warning-color);
+}
+
+.risk-score.low {
+    background: #C8E6C9;
+    color: var(--success-color);
+}
+
+/* Support Hub Cards */
+.support-card {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1rem;
+    box-shadow: var(--shadow-sm);
+    border: 2px solid var(--border-color);
+    transition: all 0.3s;
+    cursor: pointer;
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.support-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--primary-color);
+}
+
+.support-card-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+}
+
+.support-card-title {
+    color: var(--primary-color);
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.support-card-description {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+/* Goal Tracker */
+.goal-tracker {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    border-radius: 12px;
+    padding: 2rem;
+    margin: 1.5rem 0;
+    box-shadow: var(--shadow-md);
+}
+
+.goal-tracker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.goal-tracker-title {
+    color: var(--primary-color);
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.current-level-badge {
+    background: var(--primary-color);
+    color: white;
+    padding: 0.5rem 1.5rem;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.progress-bar-container {
+    background: white;
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
+    box-shadow: var(--shadow-sm);
+}
+
+.progress-bar-label {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 24px;
+    background: #E0E0E0;
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--success-color) 0%, #4CAF50 100%);
+    border-radius: 12px;
+    transition: width 0.5s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+.certification-milestones {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.milestone {
+    text-align: center;
+    flex: 1;
+}
+
+.milestone-icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.milestone-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.milestone.active {
+    color: var(--success-color);
+}
+
+.milestone.inactive {
+    color: var(--text-secondary);
+    opacity: 0.5;
+}
+
+/* Curriculum Distribution Chart Container */
+.curriculum-chart-container {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1rem 0;
+    box-shadow: var(--shadow-sm);
+}
+
+/* Header Styles */
+.main-header {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    text-align: center;
+    margin-bottom: 2rem;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Button Styles */
+.stButton > button {
+    background-color: var(--primary-color);
+    color: white;
+    border-radius: 6px;
+    border: none;
+    padding: 0.5rem 1.5rem;
+    font-weight: 500;
+    transition: all 0.3s;
+}
+
+.stButton > button:hover {
+    background-color: #003366;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+/* Success Indicators */
+.success-indicator {
+    color: var(--success-color);
+    font-weight: 600;
+}
+
+.danger-indicator {
+    color: var(--danger-color);
+    font-weight: 600;
+}
+
+.warning-indicator {
+    color: var(--warning-color);
+    font-weight: 600;
+}
+
+/* Scrollable Lists */
+.scrollable-list {
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+}
+
+.scrollable-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.scrollable-list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.scrollable-list::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 4px;
+}
+
+.scrollable-list::-webkit-scrollbar-thumb:hover {
+    background: #003366;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .support-card {
+        margin: 0.5rem 0;
+    }
+    
+    .goal-tracker {
+        padding: 1rem;
+    }
+    
+    .main-header {
+        font-size: 2rem;
+    }
+}
+

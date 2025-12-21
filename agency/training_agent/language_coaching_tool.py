@@ -185,6 +185,83 @@ class LanguageCoachingTool(BaseTool):
             logger.warning(f"Failed to initialize Gemini client: {e}")
             return None
 
+    def _analyze_cheating_risk(
+        self,
+        transcript: str,
+        expected_answer: str,
+        question_type: str
+    ) -> dict:
+        """
+        Analyze transcript for cheating risk indicators.
+        
+        Flags:
+        - Too perfect (exact match with no natural speech patterns)
+        - Lack of natural cadence (no pauses, hesitations, corrections)
+        - Unusual response patterns
+        """
+        if not GEMINI_AVAILABLE:
+            # Basic heuristic check
+            risk_score = 0
+            if transcript.strip().lower() == expected_answer.strip().lower():
+                risk_score = 30  # Perfect match might indicate cheating
+            return {
+                "cheating_risk_score": risk_score,
+                "risk_level": "Low" if risk_score < 30 else "Medium" if risk_score < 70 else "High",
+                "indicators": ["Perfect match detected"] if risk_score >= 30 else []
+            }
+        
+        try:
+            api_key = config.GEMINI_API_KEY or ""
+            if not api_key:
+                raise ValueError("GEMINI_API_KEY not found")
+            
+            client = genai.Client(api_key=api_key)
+            
+            prompt = f"""Analyze the following language assessment response for cheating risk indicators.
+
+**Question Type:** {question_type}
+**Expected Answer:** {expected_answer}
+**Student Response (Transcribed):** {transcript}
+
+**Cheating Risk Indicators to Check:**
+1. **Too Perfect**: Is the response exactly matching the expected answer with no natural variations?
+2. **Lack of Natural Cadence**: Does the transcript show no pauses, hesitations, self-corrections, or natural speech patterns?
+3. **Unusual Patterns**: Does the response seem memorized or read rather than spoken naturally?
+4. **Timing Anomalies**: (If available) Was the response given too quickly or too slowly?
+
+**Output Format (JSON only):**
+{{
+    "cheating_risk_score": <integer 0-100, where 0=no risk, 100=high risk>,
+    "risk_level": "<Low/Medium/High>",
+    "indicators": ["<list of specific risk indicators found>"],
+    "analysis": "<brief explanation of why this score was assigned>"
+}}
+
+Provide ONLY the JSON response, no additional text."""
+            
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+            
+            # Parse JSON response
+            response_text = response.text.strip()
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].split("```")[0].strip()
+            
+            result = json.loads(response_text)
+            return result
+            
+        except Exception as e:
+            return {
+                "cheating_risk_score": 0,
+                "risk_level": "Unknown",
+                "indicators": [f"Analysis error: {str(e)}"],
+                "analysis": "Could not analyze cheating risk"
+            }
+
     def _grade_response_with_gemini(
         self,
         transcript: str,
@@ -211,7 +288,20 @@ class LanguageCoachingTool(BaseTool):
             # Build grading prompt
             language_name = "Japanese" if language.startswith("ja") else "Nepali"
             
+            # Apply strict grading instruction if XPLOREKODO_STRICT is enabled
+            grading_instruction = ""
+            if config.GRADING_STANDARD == "XPLOREKODO_STRICT":
+                grading_instruction = """
+IMPORTANT: Use XPLOREKODO_STRICT grading standard (15% harder than JLPT standard).
+- Be more critical of pronunciation accuracy
+- Require higher precision in grammar
+- Apply stricter scoring thresholds
+- Reduce scores by approximately 15% compared to standard JLPT grading
+"""
+            
             prompt = f"""You are a language coach grading a {language_name} language learning response.
+
+{grading_instruction}
 
 **Candidate's Response (Transcribed):**
 {transcript}
@@ -275,6 +365,14 @@ This is a response to a Socratic question about Japanese caregiving. The candida
             
             # Ensure grade is between 1-10
             result["grade"] = max(1, min(10, result["grade"]))
+            
+            # Apply strict grading multiplier if XPLOREKODO_STRICT is enabled
+            if config.GRADING_STANDARD == "XPLOREKODO_STRICT":
+                # Reduce score by 15% (multiply by 0.85, then round)
+                original_grade = result["grade"]
+                adjusted_grade = max(1, int(original_grade * 0.85))
+                result["grade"] = adjusted_grade
+                result["accuracy_feedback"] += f" [XPLOREKODO_STRICT: Score adjusted from {original_grade} to {adjusted_grade}]"
             
             return result
             
@@ -432,6 +530,39 @@ This is a response to a Socratic question about Japanese caregiving. The candida
                     )
                     record_result = record_tool.run()
                     
+                    # Analyze cheating risk
+                    cheating_risk_score = 0
+                    cheating_risk_level = "Unknown"
+                    try:
+                        cheating_analysis = self._analyze_cheating_risk(
+                            transcript=transcript,
+                            expected_answer=self.expected_answer or word_title or "",
+                            question_type="Language_Coaching"
+                        )
+                        cheating_risk_score = cheating_analysis.get("cheating_risk_score", 0)
+                        cheating_risk_level = cheating_analysis.get("risk_level", "Unknown")
+                        
+                        # Log high-risk cases to activity_logs for Admin review
+                        if cheating_risk_score >= 70:
+                            from utils.activity_logger import ActivityLogger
+                            ActivityLogger.log(
+                                event_type="Cheating_Risk",
+                                severity="Warning",
+                                user_id=self.candidate_id,
+                                message=f"High cheating risk detected in language coaching: Risk Score {cheating_risk_score}/100",
+                                metadata={
+                                    "word_title": word_title,
+                                    "cheating_risk_score": cheating_risk_score,
+                                    "cheating_risk_level": cheating_risk_level,
+                                    "indicators": cheating_analysis.get("indicators", []),
+                                    "transcript": transcript,
+                                    "expected_answer": self.expected_answer or word_title,
+                                    "score": grading_result["grade"]
+                                }
+                            )
+                    except Exception:
+                        pass  # Don't fail if cheating analysis fails
+                    
                     # Log grading activity for admin monitoring
                     try:
                         from utils.activity_logger import ActivityLogger
@@ -444,6 +575,8 @@ This is a response to a Socratic question about Japanese caregiving. The candida
                                 "accuracy": grading_result.get("accuracy_feedback"),
                                 "grammar": grading_result.get("grammar_feedback"),
                                 "pronunciation": grading_result.get("pronunciation_hint"),
+                                "cheating_risk_score": cheating_risk_score,
+                                "cheating_risk_level": cheating_risk_level
                             }
                         )
                     except Exception:
@@ -472,6 +605,20 @@ This is a response to a Socratic question about Japanese caregiving. The candida
             
             result += "**🎯 Pronunciation Hint:**\n"
             result += f"{grading_result['pronunciation_hint']}\n\n"
+            
+            # Add cheating risk warning if detected
+            try:
+                cheating_analysis = self._analyze_cheating_risk(
+                    transcript=transcript,
+                    expected_answer=self.expected_answer or word_title or "",
+                    question_type="Language_Coaching"
+                )
+                cheating_risk_score = cheating_analysis.get("cheating_risk_score", 0)
+                if cheating_risk_score >= 70:
+                    result += f"⚠️ **Cheating Risk Alert:** Risk Score {cheating_risk_score}/100 ({cheating_analysis.get('risk_level', 'High')})\n"
+                    result += f"This response has been flagged for Admin review.\n\n"
+            except Exception:
+                pass
             
             result += f"✓ Results saved to database (dialogue_history)."
             if word_title:

@@ -63,3 +63,10 @@ GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
 
 # Security
 SECRET_KEY = os.getenv("SECRET_KEY", "change-this-in-production")
+
+# Grading Standard
+# Options: 'JLPT_STANDARD' (standard JLPT grading) or 'XPLOREKODO_STRICT' (15% harder threshold)
+GRADING_STANDARD = os.getenv("GRADING_STANDARD", "XPLOREKODO_STRICT")
+
+# Grading Threshold Multiplier (for XPLOREKODO_STRICT: 1.15 = 15% harder)
+GRADING_THRESHOLD_MULTIPLIER = 1.15 if GRADING_STANDARD == "XPLOREKODO_STRICT" else 1.0
