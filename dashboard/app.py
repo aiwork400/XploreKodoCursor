@@ -277,128 +277,260 @@ def load_financial_summary() -> dict:
 # Concierge Widget Functions
 def show_concierge_widget():
     """Display the XploreKodo Concierge Widget - floating sidebar assistant."""
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🤖 XploreKodo Concierge")
-    
-    # Initialize session state for concierge
-    if "concierge_language" not in st.session_state:
-        st.session_state.concierge_language = "en"
-    if "concierge_avatar_visible" not in st.session_state:
-        st.session_state.concierge_avatar_visible = True
-    if "concierge_messages" not in st.session_state:
-        st.session_state.concierge_messages = []
-    
-    # Language Selector
-    language_options = {
+    try:
+        # Make widget more visible with a clear header
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 🤖 XploreKodo Concierge")
+        st.sidebar.markdown("*Your multilingual assistant*")
+        
+        # Initialize session state for concierge
+        if "concierge_language" not in st.session_state:
+            st.session_state.concierge_language = "en"
+        if "concierge_avatar_visible" not in st.session_state:
+            st.session_state.concierge_avatar_visible = True
+        if "concierge_messages" not in st.session_state:
+            st.session_state.concierge_messages = []
+        if "pending_user_input" not in st.session_state:
+            st.session_state.pending_user_input = None
+        
+        # Language Selector
+        language_options = {
         'en': '🇺🇸 English',
         'ja': '🇯🇵 日本語',
-        'ne': '🇳🇵 नेपाली'
-    }
-    
-    selected_lang = st.sidebar.selectbox(
-        "🌐 Language",
-        options=list(language_options.keys()),
-        format_func=lambda x: language_options[x],
-        key="concierge_lang_select",
-        index=list(language_options.keys()).index(st.session_state.concierge_language) if st.session_state.concierge_language in language_options else 0
-    )
-    st.session_state.concierge_language = selected_lang
-    
-    # Avatar Toggle
-    st.session_state.concierge_avatar_visible = st.sidebar.checkbox(
-        "👨‍🏫 Show Avatar",
-        value=st.session_state.concierge_avatar_visible,
-        key="concierge_avatar_toggle"
-    )
-    
-    st.sidebar.markdown("---")
-    
-    # Display conversation history
-    if st.session_state.concierge_messages:
-        st.sidebar.markdown("**💬 Conversation:**")
-        for msg in st.session_state.concierge_messages[-3:]:  # Show last 3 messages
-            if msg["role"] == "user":
-                st.sidebar.markdown(f"**You:** {msg['content'][:50]}...")
-            else:
-                st.sidebar.markdown(f"**Concierge:** {msg['content'][:50]}...")
-    
-    st.sidebar.markdown("---")
-    
-    # Hybrid Input: Chat + Mic Recorder
-    input_method = st.sidebar.radio(
-        "Input Method",
-        ["💬 Text", "🎤 Voice"],
-        key="concierge_input_method",
-        horizontal=True
-    )
-    
-    user_input = None
-    
-    if input_method == "💬 Text":
-        # Text input using st.chat_input
-        user_input = st.sidebar.chat_input(
-            "Ask the Concierge...",
-            key="concierge_chat_input"
+            'ne': '🇳🇵 नेपाली'
+        }
+        
+        selected_lang = st.sidebar.selectbox(
+            "🌐 Language",
+            options=list(language_options.keys()),
+            format_func=lambda x: language_options[x],
+            key="concierge_lang_select",
+            index=list(language_options.keys()).index(st.session_state.concierge_language) if st.session_state.concierge_language in language_options else 0
         )
-    else:
-        # Voice input using streamlit-mic-recorder
-        try:
-            from streamlit_mic_recorder import mic_recorder
-            
-            audio_data = mic_recorder(
-                key="concierge_voice_recorder",
-                start_prompt="🎤 Record",
-                stop_prompt="⏹️ Stop",
-                just_once=False,
-                use_container_width=True,
+        st.session_state.concierge_language = selected_lang
+        
+        # Avatar Toggle
+        st.session_state.concierge_avatar_visible = st.sidebar.checkbox(
+            "👨‍🏫 Show Avatar",
+            value=st.session_state.concierge_avatar_visible,
+            key="concierge_avatar_toggle"
+        )
+        
+        st.sidebar.markdown("---")
+        
+        # Show welcome message if no conversation yet
+        if not st.session_state.concierge_messages:
+            welcome_messages = {
+                "en": "👋 **Welcome!** I'm your XploreKodo assistant. I can help with:\n\n• Platform features & navigation\n• Life-in-Japan advice\n• Language learning questions\n• General platform guidance\n\n**Try asking:** \"What can you help me with?\" or \"How does the virtual classroom work?\"",
+                "ja": "👋 **ようこそ！** XploreKodoアシスタントです。お手伝いできること：\n\n• プラットフォーム機能とナビゲーション\n• 日本での生活に関するアドバイス\n• 言語学習の質問\n• 一般的なプラットフォームガイダンス\n\n**試してみてください：** 「何をお手伝いできますか？」または「バーチャルクラスルームはどのように機能しますか？」",
+                "ne": "👋 **स्वागत छ!** म तपाईंको XploreKodo सहायक हुँ। म मद्दत गर्न सक्छु:\n\n• प्लेटफर्म सुविधाहरू र नेभिगेसन\n• जापानमा जीवन सल्लाह\n• भाषा सिकाइ प्रश्नहरू\n• सामान्य प्लेटफर्म मार्गदर्शन\n\n**प्रयास गर्नुहोस्:** \"तपाईं मलाई के मद्दत गर्न सक्नुहुन्छ?\" वा \"भर्चुअल कक्षा कसरी काम गर्छ?\""
+            }
+            st.sidebar.info(welcome_messages.get(st.session_state.concierge_language, welcome_messages["en"]))
+        
+        # Display conversation history
+        if st.session_state.concierge_messages:
+            st.sidebar.markdown("**💬 Conversation History:**")
+            for msg in st.session_state.concierge_messages[-5:]:  # Show last 5 messages
+                if msg["role"] == "user":
+                    with st.sidebar.expander(f"**You:** {msg['content'][:60]}...", expanded=False):
+                        st.markdown(msg['content'])
+                else:
+                    with st.sidebar.expander(f"**🤖 Concierge:** {msg['content'][:60]}...", expanded=True):
+                        st.markdown(msg['content'])
+        
+        st.sidebar.markdown("---")
+        
+        # Hybrid Input: Chat + Mic Recorder
+        input_method = st.sidebar.radio(
+            "Input Method",
+            ["💬 Text", "🎤 Voice"],
+            key="concierge_input_method",
+            horizontal=True
+        )
+        
+        user_input = None
+        
+        if input_method == "💬 Text":
+            # Text input - use text_input with a send button (chat_input doesn't work in sidebar)
+            text_input = st.sidebar.text_input(
+                "Ask the Concierge...",
+                key="concierge_text_input",
+                placeholder="Type your message here..."
             )
+            send_button = st.sidebar.button("📤 Send", key="concierge_send_text")
+            if send_button and text_input:
+                user_input = text_input
+        else:
+            # Voice input using streamlit-mic-recorder
+            st.sidebar.markdown("**🎤 Voice Recording:**")
             
-            if audio_data:
-                st.sidebar.audio(audio_data["bytes"], format="audio/wav")
+            # Initialize recording state
+            if "recorded_audio" not in st.session_state:
+                st.session_state.recorded_audio = None
+            
+            try:
+                from streamlit_mic_recorder import mic_recorder
                 
-                # Process voice input
-                if st.sidebar.button("📤 Send Voice", key="concierge_send_voice"):
-                    user_input = process_concierge_voice(
-                        audio_data["bytes"],
-                        st.session_state.concierge_language
+                # Place mic_recorder in sidebar - this should render the button in the sidebar
+                with st.sidebar.container():
+                    audio_data = mic_recorder(
+                        key="concierge_voice_recorder",
+                        start_prompt="🎤 Start Recording",
+                        stop_prompt="⏹️ Stop Recording",
+                        just_once=False,
                     )
-        except ImportError:
-            st.sidebar.warning("⚠️ Install streamlit-mic-recorder for voice input")
-            user_input = st.sidebar.text_input("Or type your message:", key="concierge_fallback_input")
-    
-    # Process user input
-    if user_input:
-        # Add user message
-        st.session_state.concierge_messages.append({
-            "role": "user",
-            "content": user_input
-        })
+                
+                # If mic_recorder returns data, store it
+                if audio_data:
+                    st.session_state.recorded_audio = audio_data
+                
+            except ImportError:
+                st.sidebar.warning("⚠️ streamlit-mic-recorder not installed")
+                st.sidebar.code("pip install streamlit-mic-recorder")
+                audio_data = None
+            except Exception as e:
+                st.sidebar.warning(f"⚠️ Mic recorder error: {str(e)}")
+                audio_data = None
+            
+            # Use recorded audio
+            final_audio = st.session_state.recorded_audio if st.session_state.recorded_audio else audio_data
+            
+            if final_audio:
+                st.sidebar.markdown("---")
+                st.sidebar.success("✅ Recording complete! Listen to your recording:")
+                
+                # Playback audio - make it prominent
+                # Handle both dict format (from mic_recorder) and direct bytes
+                audio_bytes_for_playback = final_audio.get("bytes") if isinstance(final_audio, dict) else final_audio
+                if audio_bytes_for_playback:
+                    # Ensure it's bytes, not base64 string
+                    if isinstance(audio_bytes_for_playback, str):
+                        audio_bytes_for_playback = base64.b64decode(audio_bytes_for_playback)
+                    st.sidebar.audio(audio_bytes_for_playback, format="audio/wav", autoplay=False)
+                    st.sidebar.caption("🔊 Click the play button above to hear your recording")
+                else:
+                    st.sidebar.warning("⚠️ Audio playback not available, but you can still send it for transcription.")
+                
+                # Show options
+                col1, col2 = st.sidebar.columns(2)
+                with col1:
+                    if st.button("🔄 Record Again", key="record_again_btn"):
+                        st.session_state.recorded_audio = None
+                        st.rerun()
+                
+                with col2:
+                    send_voice_btn = st.button("📤 Send Voice", key="concierge_send_voice", type="primary")
+                
+                # Process voice input when Send is clicked
+                if send_voice_btn:
+                    with st.sidebar:
+                        st.info("🎤 Transcribing your voice...")
+                        # Get audio bytes - handle both dict and bytes format
+                        audio_bytes_for_transcription = final_audio.get("bytes") if isinstance(final_audio, dict) else final_audio
+                        if not audio_bytes_for_transcription:
+                            st.error("Error: No audio data found. Please record again.")
+                        else:
+                            # Ensure it's bytes, not base64 string
+                            if isinstance(audio_bytes_for_transcription, str):
+                                audio_bytes_for_transcription = base64.b64decode(audio_bytes_for_transcription)
+                            
+                            transcribed = process_concierge_voice(
+                                audio_bytes_for_transcription,
+                                st.session_state.concierge_language
+                            )
+                        if transcribed and not transcribed.startswith("Error"):
+                            st.success(f"✅ Transcribed: \"{transcribed}\"")
+                            # Store transcribed text for processing
+                            st.session_state.pending_user_input = transcribed
+                            # Clear recorded audio after processing
+                            st.session_state.recorded_audio = None
+                            st.rerun()  # Rerun to process the transcribed text
+                        elif transcribed and transcribed.startswith("Error"):
+                            st.error(transcribed)
+                            st.info("💡 Tip: Make sure you're speaking clearly and your microphone is working. You can also type your message below.")
+            else:
+                st.sidebar.caption("💡 Click the microphone button above to start recording.")
+            
+            # Fallback text input if no audio recorded
+            if not final_audio:
+                st.sidebar.markdown("---")
+                fallback_input = st.sidebar.text_input("Or type your message:", key="concierge_fallback_input")
+                if fallback_input:
+                    user_input = fallback_input
         
-        # Get response from SupportAgent
-        response = get_concierge_response(user_input, st.session_state.concierge_language)
+        # Check for pending input from voice transcription
+        if "pending_user_input" in st.session_state and st.session_state.pending_user_input:
+            user_input = st.session_state.pending_user_input
+            del st.session_state.pending_user_input
         
-        # Add assistant message
-        st.session_state.concierge_messages.append({
-            "role": "assistant",
-            "content": response
-        })
-        
-        # Generate TTS audio if avatar is visible
-        if st.session_state.concierge_avatar_visible:
-            audio_output = generate_trilingual_tts(response, st.session_state.concierge_language)
-            if audio_output:
-                st.sidebar.audio(audio_output, format="audio/mp3")
-        
-        st.sidebar.rerun()
+        # Process user input
+        if user_input and user_input.strip():
+            # Add user message
+            st.session_state.concierge_messages.append({
+                "role": "user",
+                "content": user_input
+            })
+            
+            # Get response from SupportAgent with loading indicator
+            st.sidebar.info("🤖 Thinking...")
+            try:
+                response = get_concierge_response(user_input.strip(), st.session_state.concierge_language)
+                
+                # Add assistant message
+                st.session_state.concierge_messages.append({
+                    "role": "assistant",
+                    "content": response
+                })
+                
+                # Display response prominently (will be shown in conversation history after rerun)
+                st.sidebar.success("✅ Response generated!")
+                st.sidebar.markdown("---")
+                st.sidebar.markdown("**🤖 Concierge Response:**")
+                st.sidebar.markdown(response)
+                st.sidebar.markdown("---")
+                
+                # Generate TTS audio if avatar is visible
+                if st.session_state.concierge_avatar_visible:
+                    st.sidebar.info("🔊 Generating audio...")
+                    audio_output = generate_trilingual_tts(response, st.session_state.concierge_language)
+                    if audio_output:
+                        st.sidebar.audio(audio_output, format="audio/mp3")
+                        st.sidebar.success("✅ Audio ready!")
+                    else:
+                        st.sidebar.warning("⚠️ Audio generation unavailable")
+                
+            except Exception as e:
+                error_msg = f"Error: {str(e)}"
+                st.sidebar.error(error_msg)
+                st.session_state.concierge_messages.append({
+                    "role": "assistant",
+                    "content": error_msg
+                })
+                import traceback
+                if config.DEBUG:
+                    st.sidebar.code(traceback.format_exc())
+            
+            st.rerun()
+    except Exception as e:
+        # Show error in sidebar if widget fails - but keep widget visible
+        st.sidebar.error(f"⚠️ Widget Error: {str(e)}")
+        import traceback
+        if config.DEBUG:
+            with st.sidebar.expander("Show Error Details"):
+                st.code(traceback.format_exc())
+        # Show a fallback simple input
+        st.sidebar.info("Please refresh the page. If the error persists, check the console.")
 
 
 def process_concierge_voice(audio_bytes: bytes, language: str) -> str:
-    """Process voice input for concierge widget."""
+    """Process voice input for concierge widget - transcription only, no database required."""
     try:
-        from agency.training_agent.language_coaching_tool import LanguageCoachingTool
-        
-        # Convert audio to base64
-        audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
+        # Import Google Cloud Speech-to-Text directly
+        try:
+            from google.cloud import speech
+            GOOGLE_SPEECH_AVAILABLE = True
+        except ImportError:
+            return "Error: Google Cloud Speech-to-Text library not installed. Please install: pip install google-cloud-speech"
         
         # Determine language code for transcription
         language_codes = {
@@ -408,52 +540,365 @@ def process_concierge_voice(audio_bytes: bytes, language: str) -> str:
         }
         lang_code = language_codes.get(language, 'en-US')
         
-        # Use LanguageCoachingTool for transcription
-        transcript_tool = LanguageCoachingTool(
-            candidate_id="concierge_user",  # Placeholder
-            audio_base64=audio_base64,
-            expected_answer="",
-            question_type="conversation"
-        )
+        # Initialize speech client
+        client = None
+        try:
+            import os
+            import config
+            from pathlib import Path
+            
+            # Get credentials path from config
+            creds_path = None
+            if config.GOOGLE_APPLICATION_CREDENTIALS:
+                creds_path = Path(config.GOOGLE_APPLICATION_CREDENTIALS)
+                if not creds_path.is_absolute():
+                    project_root = Path(__file__).parent.parent
+                    creds_path = project_root / creds_path
+                
+                if creds_path.exists():
+                    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = str(creds_path)
+                    client = speech.SpeechClient.from_service_account_json(str(creds_path))
+            
+            # Fallback: try environment variable
+            if not client and os.getenv('GOOGLE_APPLICATION_CREDENTIALS'):
+                creds_path = Path(os.getenv('GOOGLE_APPLICATION_CREDENTIALS'))
+                if creds_path.exists():
+                    client = speech.SpeechClient.from_service_account_json(str(creds_path))
+            
+            # Final fallback: use default credentials
+            if not client:
+                client = speech.SpeechClient()
+                
+        except Exception as e:
+            return f"Error: Failed to initialize Speech-to-Text client: {str(e)}. Please check your Google Cloud credentials."
         
-        result = transcript_tool.run()
+        if not client:
+            return "Error: Could not initialize Speech-to-Text client. Please check your Google Cloud credentials."
         
-        # Extract transcript
-        if "Transcript:" in result:
-            transcript = result.split("Transcript:")[1].split("\n")[0].strip()
-            return transcript
-        
-        return "Could not transcribe audio. Please try again."
+        # Configure recognition
+        try:
+            # Try to detect sample rate from WAV header if possible
+            sample_rate = 44100  # Default for mic_recorder (browser typically records at 44.1kHz)
+            
+            # Check if it's a WAV file and try to read the sample rate
+            if len(audio_bytes) > 44 and audio_bytes[:4] == b'RIFF' and audio_bytes[8:12] == b'WAVE':
+                try:
+                    # WAV header: bytes 24-28 contain sample rate (little-endian)
+                    sample_rate = int.from_bytes(audio_bytes[24:28], byteorder='little')
+                except:
+                    pass  # Use default if parsing fails
+            
+            # Try multiple configurations as fallback
+            configs_to_try = [
+                # Config 1: Auto-detect with detected sample rate
+                speech.RecognitionConfig(
+                    encoding=speech.RecognitionConfig.AudioEncoding.ENCODING_UNSPECIFIED,
+                    sample_rate_hertz=sample_rate,
+                    language_code=lang_code,
+                    alternative_language_codes=["ja-JP", "ne-NP", "en-US"] if lang_code != "auto" else None,
+                    enable_automatic_punctuation=True,
+                    model="latest_long",
+                ),
+                # Config 2: Try LINEAR16 encoding (common for WAV)
+                speech.RecognitionConfig(
+                    encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+                    sample_rate_hertz=sample_rate,
+                    language_code=lang_code,
+                    alternative_language_codes=["ja-JP", "ne-NP", "en-US"] if lang_code != "auto" else None,
+                    enable_automatic_punctuation=True,
+                    model="latest_long",
+                ),
+                # Config 3: Try with 16000 Hz (standard rate)
+                speech.RecognitionConfig(
+                    encoding=speech.RecognitionConfig.AudioEncoding.ENCODING_UNSPECIFIED,
+                    sample_rate_hertz=16000,
+                    language_code=lang_code,
+                    alternative_language_codes=["ja-JP", "ne-NP", "en-US"] if lang_code != "auto" else None,
+                    enable_automatic_punctuation=True,
+                    model="latest_long",
+                ),
+            ]
+            
+            audio = speech.RecognitionAudio(content=audio_bytes)
+            
+            # Try each configuration until one works
+            response = None
+            last_error = None
+            for config_obj in configs_to_try:
+                try:
+                    response = client.recognize(config=config_obj, audio=audio)
+                    if response.results:
+                        break  # Success!
+                except Exception as e:
+                    last_error = e
+                    continue  # Try next config
+            
+            if not response:
+                # If all configs failed, raise the last error
+                raise last_error if last_error else Exception("All recognition configurations failed")
+            
+            # Extract transcript
+            if response.results:
+                transcript = ""
+                for result in response.results:
+                    transcript += result.alternatives[0].transcript + " "
+                return transcript.strip()
+            
+            return "Error: No speech detected in the audio. Please try speaking more clearly or check your microphone."
+            
+        except Exception as e:
+            error_str = str(e)
+            if "403" in error_str or "permission" in error_str.lower() or "SERVICE_DISABLED" in error_str:
+                return "Error: Speech-to-Text API access denied. Please check your Google Cloud credentials and ensure the Speech-to-Text API is enabled in your project."
+            elif "400" in error_str or "invalid" in error_str.lower() or "InvalidArgument" in error_str:
+                # More detailed error for invalid format
+                detailed_msg = f"Error: Invalid audio format ({error_str[:100]}). "
+                detailed_msg += "This might be due to:\n"
+                detailed_msg += "• Audio sample rate mismatch\n"
+                detailed_msg += "• Unsupported audio encoding\n"
+                detailed_msg += "• Corrupted audio data\n\n"
+                detailed_msg += "Please try:\n"
+                detailed_msg += "• Recording again with a clear voice\n"
+                detailed_msg += "• Using a different browser\n"
+                detailed_msg += "• Checking your microphone settings"
+                return detailed_msg
+            elif "timeout" in error_str.lower():
+                return "Error: Transcription timed out. Please try recording a shorter message."
+            else:
+                # Include more context in error message
+                return f"Error processing voice: {error_str[:200]}. Please try recording again or type your message instead."
+                
     except Exception as e:
-        return f"Error processing voice: {str(e)}"
+        import traceback
+        error_details = str(e)
+        return f"Error processing voice: {error_details}. Please try again or type your message instead."
 
 
 def get_concierge_response(user_input: str, language: str) -> str:
     """Get response from SupportAgent for concierge widget."""
+    # Handle empty input
+    if not user_input or not user_input.strip():
+        return "Please enter a message or question. I'm here to help! 😊"
+    
     try:
         from agency.support_agent.support_agent import SupportAgent
         from agency.support_agent.tools import GetLifeInJapanAdvice
         from agency.support_agent.navigation_tool import NavigateToPage
+        import config
         
-        # Initialize SupportAgent
-        support_agent = SupportAgent()
+        # Handle general platform questions first
+        user_lower = user_input.lower().strip()
+        
+        # Handle greetings and casual conversation
+        greeting_keywords = ["hello", "hi", "hey", "greetings", "good morning", "good afternoon", "good evening"]
+        if any(greeting in user_lower for greeting in greeting_keywords):
+            greetings = {
+                "en": "Hello! 👋 I'm the XploreKodo Concierge. How can I help you today?",
+                "ja": "こんにちは！👋 XploreKodoコンシェルジュです。今日はどのようにお手伝いできますか？",
+                "ne": "नमस्ते! 👋 म XploreKodo Concierge हुँ। आज म तपाईंलाई कसरी मद्दत गर्न सक्छु?"
+            }
+            return greetings.get(language, greetings["en"])
+        
+        # Handle "how are you" and similar questions
+        if any(phrase in user_lower for phrase in ["how are you", "how's it going", "how do you do", "what's up"]):
+            responses = {
+                "en": "I'm doing great, thank you! 😊 I'm here to help you with XploreKodo platform questions, life-in-Japan advice, and navigation. What would you like to know?",
+                "ja": "元気です、ありがとうございます！😊 XploreKodoプラットフォームの質問、日本での生活に関するアドバイス、ナビゲーションをお手伝いします。何か知りたいことはありますか？",
+                "ne": "म ठिक छु, धन्यवाद! 😊 म XploreKodo प्लेटफर्म प्रश्नहरू, जापानमा जीवन सल्लाह, र नेभिगेसनमा मद्दत गर्न यहाँ छु। तपाईं के जान्न चाहनुहुन्छ?",
+            }
+            return responses.get(language, responses["en"])
+        
+        # Platform feature questions
+        if any(keyword in user_lower for keyword in ["support", "language", "nepalese", "nepali", "japanese", "multilingual", "what languages", "which languages"]):
+            if "nepal" in user_lower or "nepali" in user_lower or "ne" in user_lower:
+                return """✅ **Yes! XploreKodo supports Nepali (नेपाली).**
+
+The platform is **trilingual** and supports:
+- 🇺🇸 **English** (en)
+- 🇯🇵 **Japanese** (日本語) (ja)
+- 🇳🇵 **Nepali** (नेपाली) (ne)
+
+You can switch languages using the language selector in the Concierge widget. All features including voice recording, text-to-speech, and AI responses work in all three languages."""
+            
+            if "japan" in user_lower or "japanese" in user_lower or "ja" in user_lower:
+                return """✅ **Yes! XploreKodo supports Japanese (日本語).**
+
+The platform is **trilingual** and supports:
+- 🇺🇸 **English** (en)
+- 🇯🇵 **Japanese** (日本語) (ja)
+- 🇳🇵 **Nepali** (नेपाली) (ne)
+
+You can switch languages using the language selector in the Concierge widget. All features including voice recording, text-to-speech, and AI responses work in all three languages."""
+            
+            return """✅ **XploreKodo is a Trilingual Platform!**
+
+The platform supports **three languages**:
+- 🇺🇸 **English** (en)
+- 🇯🇵 **Japanese** (日本語) (ja)
+- 🇳🇵 **Nepali** (नेपाली) (ne)
+
+**Features available in all languages:**
+- Voice recording and transcription
+- Text-to-speech responses
+- AI-powered language coaching
+- Virtual classroom with Sensei avatar
+- Life-in-Japan support and advice
+
+Switch languages using the 🌐 Language selector above!"""
         
         # Check if user wants to navigate
         navigation_keywords = ["go to", "take me to", "show me", "navigate to", "open"]
-        if any(keyword in user_input.lower() for keyword in navigation_keywords):
+        if any(keyword in user_lower for keyword in navigation_keywords):
             # Use navigation tool
             nav_tool = NavigateToPage(page_name=user_input, reason=f"User requested navigation: {user_input}")
             return nav_tool.run()
         
-        # Otherwise, use GetLifeInJapanAdvice
+        # Check if it's a general question about the platform
+        platform_keywords = ["what is", "what can", "how does", "how to", "help", "features", "capabilities"]
+        if any(keyword in user_lower for keyword in platform_keywords) and not any(kw in user_lower for kw in ["visa", "bank", "housing", "health", "legal"]):
+            return """🤖 **XploreKodo Concierge can help you with:**
+
+**Platform Features:**
+- Language learning (N5-N3 Japanese proficiency)
+- Voice coaching with AI Sensei
+- Virtual classroom with 2D animated avatar
+- Trilingual support (English, Japanese, Nepali)
+
+**Life-in-Japan Support:**
+- Visa and immigration questions
+- Banking and financial services
+- Healthcare and insurance
+- Housing and utilities
+- Legal rights and responsibilities
+
+**Navigation:**
+- Say "take me to [page name]" to navigate
+- Available pages: Candidate View, Virtual Classroom, Life-in-Japan Support, etc.
+
+Try asking about specific topics like "visa renewal" or "banking in Japan" for detailed information!"""
+        
+        # Otherwise, use GetLifeInJapanAdvice for life-in-Japan questions
         advice_tool = GetLifeInJapanAdvice(
             query=user_input,
             language=language
         )
-        return advice_tool.run()
+        result = advice_tool.run()
+        
+        # If no results found, use AI to answer general questions
+        if "❌ No information found" in result:
+            # Try using Gemini AI for general platform questions
+            try:
+                from google import genai
+                import config
+                
+                if config.GEMINI_API_KEY:
+                    client = genai.Client(api_key=config.GEMINI_API_KEY)
+                    
+                    # Create a comprehensive prompt for platform questions
+                    prompt = f"""You are the XploreKodo Concierge, an AI assistant for the XploreKodo platform.
+
+**Platform Overview:**
+XploreKodo is a 360° AI-powered lifecycle platform for Nepali human capital preparing for work in Japan. It provides:
+- Trilingual training (N5-N3 Japanese proficiency, Kaigo caregiving, AI/ML tech)
+- Voice coaching with AI Sensei and 2D animated avatar
+- Virtual classroom with live voice interaction
+- Life-in-Japan support (visa, banking, housing, legal)
+- Document vault and compliance tracking
+- Multi-phase progression system
+
+**User Question:** {user_input}
+
+**Instructions:**
+- Answer the question helpfully and accurately about XploreKodo platform features
+- If the question is about life in Japan (visa, banking, housing, etc.), acknowledge that specific information wasn't found in the knowledge base
+- Be conversational, friendly, and helpful
+- If you don't know something, suggest where the user can find more information
+- Keep responses concise (2-3 paragraphs max)
+
+**Response (in {language}):**"""
+                    
+                    ai_response = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=prompt
+                    )
+                    
+                    response_text = ai_response.text.strip()
+                    
+                    # Add helpful context
+                    return f"""{response_text}
+
+---
+
+💡 **Need more specific help?**
+- Life-in-Japan questions: Try "visa renewal", "banking in Japan", "housing"
+- Platform features: Ask about "virtual classroom", "voice coaching", "language learning"
+- Navigation: Say "take me to [page name]" to navigate"""
+                    
+            except Exception as ai_error:
+                # Fallback if AI fails
+                return f"""{result}
+
+💡 **I couldn't find specific information, but I can help with:**
+- **Life-in-Japan:** Visa, banking, housing, healthcare, legal rights
+- **Platform Features:** Language learning, virtual classroom, voice coaching, trilingual support
+- **Navigation:** Say "take me to [page name]" to navigate
+
+**Try asking:**
+- "What is the virtual classroom?"
+- "How does voice coaching work?"
+- "Tell me about visa renewal"
+- "What languages are supported?"
+
+Or rephrase your question and I'll do my best to help! 😊"""
+        
+        return result
         
     except Exception as e:
-        return f"I apologize, but I encountered an error: {str(e)}. Please try rephrasing your question."
+        # Enhanced error handling with AI fallback
+        try:
+            from google import genai
+            import config
+            
+            if config.GEMINI_API_KEY:
+                client = genai.Client(api_key=config.GEMINI_API_KEY)
+                
+                prompt = f"""You are the XploreKodo Concierge. A user asked: "{user_input}"
+
+An error occurred: {str(e)}
+
+Provide a helpful, friendly response that:
+1. Acknowledges the question
+2. Provides general guidance about XploreKodo platform
+3. Suggests alternative ways to get help
+4. Keeps it concise and helpful
+
+Response (in {language}):"""
+                
+                ai_response = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=prompt
+                )
+                
+                return f"""{ai_response.text.strip()}
+
+⚠️ *Note: There was a technical issue, but I've provided a helpful response above.*"""
+        except:
+            pass
+        
+        return f"""I apologize, but I encountered an error: {str(e)}
+
+💡 **I can help you with:**
+- Questions about XploreKodo platform features
+- Life-in-Japan advice (visa, banking, housing, etc.)
+- Navigation to different pages
+- General platform guidance
+
+**Try asking:**
+- "What can you help me with?"
+- "How does the virtual classroom work?"
+- "Tell me about language learning"
+
+Or rephrase your question and I'll do my best to help! 😊"""
 
 
 def generate_trilingual_tts(text: str, language: str) -> bytes | None:
@@ -533,7 +978,17 @@ def main():
     )
     
     # Show Concierge Widget (after page selection to avoid conflicts)
-    show_concierge_widget()
+    # Always show widget - it's a core feature
+    try:
+        show_concierge_widget()
+    except Exception as e:
+        # If widget fails completely, show a fallback message
+        st.sidebar.markdown("---")
+        st.sidebar.error(f"⚠️ Concierge Widget Error: {str(e)}")
+        import traceback
+        if config.DEBUG:
+            with st.sidebar.expander("Debug Info"):
+                st.code(traceback.format_exc())
 
     if page == "Candidate View":
         show_candidate_view()
@@ -588,7 +1043,7 @@ def show_candidate_view():
             with col1:
                 st.info("💡 Click the button below to generate an AI-powered executive summary of the candidate's progress in the last 24 hours.")
             with col2:
-                if st.button("🔄 Generate Briefing", key="generate_briefing_btn", use_container_width=True):
+                if st.button("🔄 Generate Briefing", key="generate_briefing_btn", width='stretch'):
                     try:
                         from agency.student_progress_agent.tools import GenerateDailyBriefing
                         
@@ -634,7 +1089,7 @@ def show_candidate_view():
             # Display dataframe with styling
             st.dataframe(
                 df,
-                use_container_width=True,
+                width='stretch',
                 hide_index=True,
             )
 
@@ -924,7 +1379,7 @@ def show_financial_ledger():
                 for provider, data in summary["provider_breakdown"].items()
             ]
         )
-        st.dataframe(provider_df, use_container_width=True, hide_index=True)
+        st.dataframe(provider_df, width='stretch', hide_index=True)
 
     # Recent payments
     if summary["recent_payments"]:
@@ -941,7 +1396,7 @@ def show_financial_ledger():
                 for payment in summary["recent_payments"]
             ]
         )
-        st.dataframe(recent_df, use_container_width=True, hide_index=True)
+        st.dataframe(recent_df, width='stretch', hide_index=True)
 
 
 def show_socratic_history(dialogue_history: list | None, candidate_id: str):
@@ -1081,7 +1536,6 @@ def show_socratic_history(dialogue_history: list | None, candidate_id: str):
                 start_prompt="🎤 Click to Record",
                 stop_prompt="⏹️ Click to Stop",
                 just_once=False,
-                use_container_width=False,
             )
             
             if audio_data:
@@ -1366,62 +1820,62 @@ def show_admin_dashboard():
                 ActivityLog.event_type == "Cheating_Risk",
                 ActivityLog.severity == "Warning"
             ).order_by(ActivityLog.timestamp.desc()).limit(5).all()
-        except Exception as e:
-            st.warning(f"Could not load cheating risk logs: {str(e)}")
-            cheating_risk_logs = []
-        
-        if cheating_risk_logs:
-            st.markdown(
-                '<div class="cheating-risk-section">',
-                unsafe_allow_html=True
-            )
             
-            # Scrollable list container
-            st.markdown('<div class="scrollable-list">', unsafe_allow_html=True)
-            
-            for log in cheating_risk_logs:
-                metadata = log.event_metadata or {}
-                risk_score = metadata.get("cheating_risk_score", 0)
-                
-                # Determine risk level
-                if risk_score >= 80:
-                    risk_class = "high"
-                    risk_label = "HIGH"
-                elif risk_score >= 70:
-                    risk_class = "medium"
-                    risk_label = "MEDIUM"
-                else:
-                    risk_class = "low"
-                    risk_label = "LOW"
-                
-                indicators = metadata.get("indicators", [])
-                
+            if cheating_risk_logs:
                 st.markdown(
-                    f"""
-                    <div class="risk-event-card">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                            <strong style="color: #D32F2F;">🚨 Cheating Risk Detected</strong>
-                            <span class="risk-score {risk_class}">{risk_label}: {risk_score}/100</span>
-                        </div>
-                        <div style="color: #757575; font-size: 0.875rem; margin-bottom: 0.5rem;">
-                            <strong>Time:</strong> {log.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC')}<br>
-                            <strong>User:</strong> {log.user_id or 'System'}<br>
-                            <strong>Question:</strong> {metadata.get('question_type', 'N/A')} (Q{metadata.get('question_number', 'N/A')})
-                        </div>
-                        <div style="color: #212121; margin-top: 0.5rem;">
-                            <strong>Indicators:</strong>
-                            <ul style="margin: 0.25rem 0; padding-left: 1.5rem;">
-                                {''.join([f'<li>{ind}</li>' for ind in indicators[:3]])}
-                            </ul>
-                        </div>
-                    </div>
-                    """,
+                    '<div class="cheating-risk-section">',
                     unsafe_allow_html=True
                 )
-            
-            st.markdown('</div>', unsafe_allow_html=True)  # Close scrollable-list
-            st.markdown('</div>', unsafe_allow_html=True)  # Close cheating-risk-section
-        else:
+                
+                # Scrollable list container
+                st.markdown('<div class="scrollable-list">', unsafe_allow_html=True)
+                
+                for log in cheating_risk_logs:
+                    metadata = log.event_metadata or {}
+                    risk_score = metadata.get("cheating_risk_score", 0)
+                    
+                    # Determine risk level
+                    if risk_score >= 80:
+                        risk_class = "high"
+                        risk_label = "HIGH"
+                    elif risk_score >= 70:
+                        risk_class = "medium"
+                        risk_label = "MEDIUM"
+                    else:
+                        risk_class = "low"
+                        risk_label = "LOW"
+                    
+                    indicators = metadata.get("indicators", [])
+                    
+                    st.markdown(
+                        f"""
+                        <div class="risk-event-card">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                <strong style="color: #D32F2F;">🚨 Cheating Risk Detected</strong>
+                                <span class="risk-score {risk_class}">{risk_label}: {risk_score}/100</span>
+                            </div>
+                            <div style="color: #757575; font-size: 0.875rem; margin-bottom: 0.5rem;">
+                                <strong>Time:</strong> {log.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC')}<br>
+                                <strong>User:</strong> {log.user_id or 'System'}<br>
+                                <strong>Question:</strong> {metadata.get('question_type', 'N/A')} (Q{metadata.get('question_number', 'N/A')})
+                            </div>
+                            <div style="color: #212121; margin-top: 0.5rem;">
+                                <strong>Indicators:</strong>
+                                <ul style="margin: 0.25rem 0; padding-left: 1.5rem;">
+                                    {''.join([f'<li>{ind}</li>' for ind in indicators[:3]])}
+                                </ul>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                
+                st.markdown('</div>', unsafe_allow_html=True)  # Close scrollable-list
+                st.markdown('</div>', unsafe_allow_html=True)  # Close cheating-risk-section
+            else:
+                st.info("✅ No high-risk cheating events detected in recent assessments.")
+        except Exception as e:
+            st.warning(f"Could not load cheating risk logs: {str(e)}")
             st.info("✅ No high-risk cheating events detected in recent assessments.")
         finally:
             if 'db_risk' in locals():
@@ -1460,7 +1914,7 @@ def show_admin_dashboard():
                 })
                 
                 st.markdown('<div class="curriculum-chart-container">', unsafe_allow_html=True)
-                st.bar_chart(chart_data.set_index("Track"), use_container_width=True)
+                st.bar_chart(chart_data.set_index("Track"), width='stretch')
                 st.markdown('</div>', unsafe_allow_html=True)
                 
                 # Show breakdown
@@ -1528,7 +1982,7 @@ def show_admin_dashboard():
                 })
             
             df_logs = pd.DataFrame(log_data)
-            st.dataframe(df_logs, use_container_width=True, hide_index=True)
+            st.dataframe(df_logs, width='stretch', hide_index=True)
             
             # Detailed view for selected log
             if len(audit_logs) > 0:
@@ -1889,7 +2343,7 @@ def show_support_hub():
                 if st.button(
                     f"{info['icon']} {info['title']}",
                     key=f"support_card_{category}",
-                    use_container_width=True
+                    width='stretch'
                 ):
                     st.session_state[f"selected_category_{category}"] = True
                 
@@ -2041,7 +2495,7 @@ def show_compliance_view():
                 }
                 for doc in documents
             ])
-            st.dataframe(doc_df, use_container_width=True, hide_index=True)
+            st.dataframe(doc_df, width='stretch', hide_index=True)
         else:
             st.info("No documents found in Document Vault for this candidate.")
         

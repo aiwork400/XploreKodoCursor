@@ -377,9 +377,22 @@ def process_voice_with_gemini_native_audio(audio_bytes: bytes, candidate_id: str
         )
         
         transcript_result = transcript_tool.run()
+        
+        # Check for errors in transcription
+        if transcript_result.startswith("Error:"):
+            return {
+                "success": False,
+                "error": transcript_result.replace("Error: ", "")
+            }
+        
         transcript = ""
         if "Transcript:" in transcript_result:
             transcript = transcript_result.split("Transcript:")[1].split("\n")[0].strip()
+        elif not transcript_result or transcript_result.strip() == "":
+            return {
+                "success": False,
+                "error": "Failed to transcribe audio. Please check your microphone and try again."
+            }
         
         # Step 2: Generate response using Gemini with native audio streaming
         context = "You are a Japanese language teacher (Sensei) in a virtual classroom. "
@@ -619,11 +632,11 @@ def main():
             
             # Start/Stop Coaching Button
             if not st.session_state.coaching_active:
-                if st.button("🎙️ Start Live Coaching", type="primary", use_container_width=True):
+                if st.button("🎙️ Start Live Coaching", type="primary", width='stretch'):
                     st.session_state.coaching_active = True
                     st.rerun()
             else:
-                if st.button("⏹️ Stop Coaching", type="secondary", use_container_width=True):
+                if st.button("⏹️ Stop Coaching", type="secondary", width='stretch'):
                     st.session_state.coaching_active = False
                     st.session_state.avatar_talking = False
                     st.rerun()
@@ -640,7 +653,6 @@ def main():
                         start_prompt="🎤 Recording...",
                         stop_prompt="⏹️ Stop Recording",
                         just_once=False,
-                        use_container_width=True,
                     )
                     
                     if audio_data:
@@ -754,7 +766,22 @@ def main():
                                     st.success("✅ Response received!")
                                     st.rerun()
                                 else:
-                                    st.error(f"❌ Error: {result.get('error', 'Unknown error')}")
+                                    error_msg = result.get('error', 'Unknown error')
+                                    st.error(f"❌ Error: {error_msg}")
+                                    
+                                    # Show specific help for API errors
+                                    if "SERVICE_DISABLED" in error_msg or "403" in error_msg or "not enabled" in error_msg.lower():
+                                        st.warning("""
+                                        **🔧 Google Cloud Speech-to-Text API is not enabled.**
+                                        
+                                        To fix this:
+                                        1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/library/speech.googleapis.com)
+                                        2. Select your project (ID: 99247280486)
+                                        3. Click "Enable" to activate the Speech-to-Text API
+                                        4. Wait a few minutes for the change to propagate
+                                        5. Refresh this page and try again
+                                        """)
+                                    
                                     st.session_state.avatar_talking = False
                 else:
                     st.warning("⚠️ Microphone recorder not available. Install: pip install streamlit-mic-recorder")

@@ -64,6 +64,11 @@ class LanguageCoachingTool(BaseTool):
         default=None,
         description="Expected answer or context for grading (optional, helps with accuracy assessment)"
     )
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._last_error = None  # Store last error message for user feedback
+        self._project_id = None  # Store project ID from credentials
 
     def _initialize_speech_client(self):
         """Initialize Google Cloud Speech-to-Text client using credentials."""
@@ -73,6 +78,7 @@ class LanguageCoachingTool(BaseTool):
         try:
             project_root = Path(__file__).parent.parent.parent
             client = None
+            creds_path_used = None
             
             # Priority 1: Check GOOGLE_APPLICATION_CREDENTIALS from config (.env)
             if config.GOOGLE_APPLICATION_CREDENTIALS:
@@ -83,6 +89,7 @@ class LanguageCoachingTool(BaseTool):
                 if creds_path.exists():
                     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = str(creds_path)
                     client = speech.SpeechClient.from_service_account_json(str(creds_path))
+                    creds_path_used = creds_path
             
             # Priority 2: Try GOOGLE_CLOUD_TRANSLATE_CREDENTIALS_PATH from config
             if client is None:
@@ -95,6 +102,7 @@ class LanguageCoachingTool(BaseTool):
                     if creds_path.exists():
                         os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = str(creds_path)
                         client = speech.SpeechClient.from_service_account_json(str(creds_path))
+                        creds_path_used = creds_path
             
             # Priority 3: Try default credentials file location (google_creds.json)
             if client is None:
@@ -102,10 +110,23 @@ class LanguageCoachingTool(BaseTool):
                 if default_creds.exists():
                     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = str(default_creds)
                     client = speech.SpeechClient.from_service_account_json(str(default_creds))
+                    creds_path_used = default_creds
             
             # Priority 4: Try environment variable (if already set)
             if client is None and os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
                 client = speech.SpeechClient()
+            
+            # Store credentials path and project ID for error messages
+            if creds_path_used and client:
+                try:
+                    import json
+                    with open(creds_path_used, 'r') as f:
+                        creds_data = json.load(f)
+                        self._project_id = creds_data.get('project_id', 'Unknown')
+                except:
+                    self._project_id = 'Unknown'
+            else:
+                self._project_id = None
             
             return client
             
@@ -156,7 +177,51 @@ class LanguageCoachingTool(BaseTool):
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)
-            logger.warning(f"Speech-to-Text error: {e}")
+            error_str = str(e)
+            logger.warning(f"Speech-to-Text error: {error_str}")
+            
+            # Check for specific API errors
+            if "SERVICE_DISABLED" in error_str or "403" in error_str:
+                # Extract activation URL and project info if present
+                activation_url = None
+                project_in_error = None
+                
+                if "activationUrl" in error_str or "activation" in error_str.lower():
+                    # Try to extract URL from error message
+                    import re
+                    url_match = re.search(r'https://console\.developers\.google\.com[^\s\)]+', error_str)
+                    if url_match:
+                        activation_url = url_match.group(0)
+                
+                # Extract project number from error
+                project_match = re.search(r'project[=\s]+(\d+)', error_str)
+                if project_match:
+                    project_in_error = project_match.group(1)
+                
+                error_msg = "Google Cloud Speech-to-Text API is not enabled. "
+                
+                # Add project ID mismatch warning if detected
+                if self._project_id and project_in_error:
+                    error_msg += f"\n\n⚠️ Project Mismatch Detected:\n"
+                    error_msg += f"   - Your credentials are for project: {self._project_id}\n"
+                    error_msg += f"   - API is trying to use project: {project_in_error}\n"
+                    error_msg += f"\n💡 Solution: Enable Speech-to-Text API in project '{self._project_id}'\n"
+                    error_msg += f"   Visit: https://console.cloud.google.com/apis/library/speech.googleapis.com?project={self._project_id}"
+                elif activation_url:
+                    error_msg += f"Please enable it at: {activation_url}"
+                else:
+                    if self._project_id:
+                        error_msg += f"Please enable it in project '{self._project_id}' at:\n"
+                        error_msg += f"https://console.cloud.google.com/apis/library/speech.googleapis.com?project={self._project_id}"
+                    else:
+                        error_msg += "Please enable it in Google Cloud Console."
+                
+                # Store error message for user display
+                self._last_error = error_msg
+                return None
+            
+            # Store generic error
+            self._last_error = f"Speech-to-Text error: {error_str}"
             return None
 
     def _initialize_gemini_client(self):
@@ -420,7 +485,10 @@ This is a response to a Socratic question about Japanese caregiving. The candida
             transcript = self._transcribe_audio(audio_content, self.language_code)
             
             if not transcript:
-                return "Error: Failed to transcribe audio. Please check your audio format and ensure Google Cloud Speech-to-Text is configured."
+                # Return specific error message if available
+                if self._last_error:
+                    return f"Error: {self._last_error}"
+                return "Error: Failed to transcribe audio. Please check your audio format and ensure Google Cloud Speech-to-Text is configured and enabled."
 
             # Grade response using Gemini
             grading_result = self._grade_response_with_gemini(
