@@ -27,7 +27,7 @@ from agency.developer_agent.developer_agent import DeveloperAgent
 from agency.database_agent.database_agent import DatabaseAgent
 from agency.security_officer_agent.security_officer_agent import SecurityOfficerAgent
 from agency.testing_qa_agent.testing_qa_agent import TestingQAAgent
-from agency.DocumentVaultAgent.DocumentVaultAgent import DocumentVaultAgent
+from agency.DocumentVaultAgent.DocumentVaultAgent import DocumentVaultAgent 
 from agency.documentation_agent.documentation_agent import DocumentationAgent
 from mvp_v1.training.advisory_agent import AdvisoryAgent
 from agency.operations_agent.operations_agent import OperationsAgent
