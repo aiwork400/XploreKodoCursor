@@ -37,6 +37,32 @@ LANGUAGE_TTS_VOICES = {
     'ne': 'ne-NP-Wavenet-A',  # Nepali
 }
 
+# Track-based TTS Voice Personality Mapping
+# Maps track to voice personality settings (tone, pitch, speaking_rate)
+TRACK_TTS_PERSONALITY = {
+    'Care-giving': {
+        'tone': 'gentle',
+        'pitch': -2.0,  # Slightly lower pitch for gentle, caring tone
+        'speaking_rate': 0.95,  # Slightly slower for clarity and warmth
+        'ssml_gender': 'FEMALE',  # Often preferred for caregiving contexts
+    },
+    'Academic': {
+        'tone': 'formal',
+        'pitch': 0.0,  # Neutral pitch for formal tone
+        'speaking_rate': 1.0,  # Standard rate
+        'ssml_gender': 'NEUTRAL',  # Neutral for academic contexts
+    },
+    'Food/Tech': {
+        'tone': 'professional',
+        'pitch': 1.0,  # Slightly higher for energy and engagement
+        'speaking_rate': 1.05,  # Slightly faster for tech contexts
+        'ssml_gender': 'NEUTRAL',  # Neutral for professional contexts
+    },
+}
+
+# Track options for Triple-Track Coaching
+COACHING_TRACKS = ['Care-giving', 'Academic', 'Food/Tech']
+
 # Language Display Names
 LANGUAGE_NAMES = {
     'en': 'English',
