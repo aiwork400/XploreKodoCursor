@@ -138,7 +138,7 @@ Provide ONLY the Nepali translation, nothing else. Do not include explanations o
         # Generate translation
         # Note: Using gemini-2.5-flash (gemini-1.5-flash was deprecated)
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.0-flash",
             contents=prompt
         )
         

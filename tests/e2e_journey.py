@@ -39,7 +39,7 @@ class E2EJourneyTest:
     def __init__(self, candidate_id: str = "siddharth_test", candidate_name: str = "Siddharth"):
         self.candidate_id = candidate_id
         self.candidate_name = candidate_name
-        self.api_base_url = "http://localhost:8000"
+        self.api_base_url = "http://127.0.0.1:8000"
         self.test_results = []
 
     def log_step(self, step_num: int, step_name: str, status: str, message: str = ""):

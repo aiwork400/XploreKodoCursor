@@ -305,7 +305,7 @@ class LanguageCoachingTool(BaseTool):
 Provide ONLY the JSON response, no additional text."""
             
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.0-flash",
                 contents=prompt
             )
             
@@ -400,7 +400,7 @@ This is a response to a Socratic question about Japanese caregiving. The candida
             # Generate response using new SDK syntax
             # Note: Using gemini-2.5-flash (gemini-1.5-flash was deprecated)
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.0-flash",
                 contents=prompt
             )
             

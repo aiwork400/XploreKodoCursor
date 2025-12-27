@@ -543,7 +543,7 @@ def process_voice_input(audio_bytes: bytes, candidate_id: str) -> dict:
                 
                 # Generate response
                 response = client.models.generate_content(
-                    model="gemini-2.5-flash",
+                    model="gemini-2.0-flash",
                     contents=context
                 )
                 

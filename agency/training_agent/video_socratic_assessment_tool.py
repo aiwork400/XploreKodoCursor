@@ -23,7 +23,7 @@ from models.curriculum import Syllabus
 
 # Try to import Gemini for evaluation
 try:
-    import google.generativeai as genai
+    from google import genai
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
@@ -62,8 +62,13 @@ class VideoSocraticAssessmentTool(BaseTool):
         Get initial question for high-stakes scenarios from Syllabus.
         
         Checks the Syllabus table for scenarios with initial questions.
+        For Food/Tech track, provides default HACCP temperature monitoring question.
         """
         try:
+            # Food/Tech Track Default: Temperature log scenario for HACCP training
+            if self.track == "Food/Tech" and (not topic or topic == "food_safety" or topic == "haccp"):
+                return "The temperature log shows the walk-in freezer at -10°C. Is this acceptable under Japanese standards? If not, what is the corrective action?"
+            
             # Check if this topic has an initial question in the Syllabus
             syllabus_entry = db.query(Syllabus).filter(
                 Syllabus.topic == topic,
@@ -159,8 +164,7 @@ class VideoSocraticAssessmentTool(BaseTool):
             }
         
         try:
-            genai.configure(api_key=config.GEMINI_API_KEY)
-            model = genai.GenerativeModel('gemini-pro')
+            client = genai.Client(api_key=config.GEMINI_API_KEY)
             
             # Build evaluation prompt based on track
             track_context = {
@@ -174,7 +178,7 @@ class VideoSocraticAssessmentTool(BaseTool):
                 },
                 "Food/Tech": {
                     "tone_requirement": "Use professional workplace language. Can use Plain form in technical contexts, but Desu/Masu for customer-facing situations.",
-                    "vocabulary_focus": "Technical terminology, industry-specific vocabulary, professional communication"
+                    "vocabulary_focus": "Japanese Food Safety (HACCP) terminology, Kitchen Operations vocabulary, temperature monitoring, food handling protocols, sanitation procedures, Commercial Center standards"
                 }
             }
             
@@ -227,7 +231,10 @@ Respond in JSON format:
 }}
 """
             
-            response = model.generate_content(evaluation_prompt)
+            response = client.models.generate_content(
+                model='gemini-2.0-flash',
+                contents=evaluation_prompt
+            )
             response_text = response.text.strip()
             
             # Parse JSON response

@@ -39,6 +39,7 @@ try:
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+    from reportlab.lib.fonts import addMapping
     from reportlab.graphics.shapes import Drawing, Rect, Line, Circle, Group, String
     from reportlab.graphics.charts.barcharts import VerticalBarChart
     from reportlab.graphics import renderPDF
@@ -49,10 +50,11 @@ except ImportError:
 
 # Try to import Gemini for LLM assessment
 try:
-    import google.generativeai as genai
+    from google import genai
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
+    genai = None
 
 
 class GeneratePerformanceReport(BaseTool):
@@ -97,7 +99,26 @@ class GeneratePerformanceReport(BaseTool):
                 font_path = fonts_dir / font_name
                 if font_path.exists():
                     try:
-                        pdfmetrics.registerFont(TTFont('JapaneseFont', str(font_path)))
+                        # ATOMIC FIX: Bulletproof PDF Font Mapping using registerFontFamily
+                        family_name = 'japanesefont'
+                        pdfmetrics.registerFont(TTFont(family_name, str(font_path)))
+                        
+                        # Explicitly link the family name to itself for all styles
+                        try:
+                            # Try registerFontFamily (newer ReportLab versions)
+                            pdfmetrics.registerFontFamily(
+                                family_name,
+                                normal=family_name,
+                                bold=family_name,
+                                italic=family_name,
+                                boldItalic=family_name
+                            )
+                        except AttributeError:
+                            # Fallback to addMapping for older ReportLab versions
+                            addMapping(family_name, 0, 0, family_name)  # normal
+                            addMapping(family_name, 1, 0, family_name)  # bold
+                            addMapping(family_name, 0, 1, family_name)  # italic
+                            addMapping(family_name, 1, 1, family_name)  # bold-italic
                         font_registered = True
                         import logging
                         logger = logging.getLogger(__name__)
@@ -112,7 +133,27 @@ class GeneratePerformanceReport(BaseTool):
             # Fallback to ReportLab's built-in Japanese CID font
             if not font_registered:
                 try:
-                    pdfmetrics.registerFont(UnicodeCIDFont('HeiseiKakuGo-W5'))
+                    # ATOMIC FIX: Bulletproof PDF Font Mapping using registerFontFamily
+                    family_name = 'japanesefont'
+                    cid_font_name = 'HeiseiKakuGo-W5'
+                    pdfmetrics.registerFont(UnicodeCIDFont(cid_font_name))
+                    
+                    # Explicitly link the family name to itself for all styles
+                    try:
+                        # Try registerFontFamily (newer ReportLab versions)
+                        pdfmetrics.registerFontFamily(
+                            family_name,
+                            normal=cid_font_name,
+                            bold=cid_font_name,
+                            italic=cid_font_name,
+                            boldItalic=cid_font_name
+                        )
+                    except AttributeError:
+                        # Fallback to addMapping for older ReportLab versions
+                        addMapping(family_name, 0, 0, cid_font_name)  # normal
+                        addMapping(family_name, 1, 0, cid_font_name)  # bold
+                        addMapping(family_name, 0, 1, cid_font_name)  # italic
+                        addMapping(family_name, 1, 1, cid_font_name)  # bold-italic
                     font_registered = True
                     import logging
                     logger = logging.getLogger(__name__)
@@ -236,16 +277,13 @@ class GeneratePerformanceReport(BaseTool):
         finally:
             db.close()
 
-    def _generate_llm_assessment(self, track: str, skills: dict) -> tuple[str, str]:
+    def _generate_llm_assessment(self, track: str, skills: dict) -> str:
         """
-        Generate bilingual assessment using Gemini.
-        Returns (english_assessment, japanese_assessment).
+        Generate English-only assessment using Gemini for the Official Performance Report.
+        Returns english_assessment only.
         """
         if not GEMINI_AVAILABLE:
-            return (
-                f"Student shows {sum(skills.values())/len(skills):.1f}% average mastery in {track}.",
-                f"{track}トラックでの平均習熟度は{sum(skills.values())/len(skills):.1f}%です。"
-            )
+            return f"Student shows {sum(skills.values())/len(skills):.1f}% average mastery in {track}."
         
         try:
             # Format scores for prompt
@@ -253,44 +291,32 @@ class GeneratePerformanceReport(BaseTool):
             tone_score = skills.get("Tone/Honorifics", 0.0)
             logic_score = skills.get("Contextual Logic", 0.0)
             
+            # Pivot to English: Instruct LLM to generate detailed_assessment EXCLUSIVELY in English
             prompt = f"""Given these performance scores for the {track} track:
 - Vocabulary: {vocab_score}%
 - Tone/Honorifics: {tone_score}%
 - Contextual Logic: {logic_score}%
 
-Write a professional 2-sentence assessment in BOTH English and Japanese for a Sensei's sign-off.
+Write a professional 3-4 sentence detailed assessment EXCLUSIVELY in English for the Official Performance Report.
 
-Format your response EXACTLY as:
-ENGLISH: [2 sentences]
-JAPANESE: [2 sentences in Japanese]
-
-Be encouraging but honest. Focus on strengths and specific areas for improvement."""
+Be encouraging but honest. Focus on strengths and specific areas for improvement. Provide actionable feedback."""
             
-            genai.configure(api_key=config.GEMINI_API_KEY)
-            model = genai.GenerativeModel('gemini-pro')
-            response = model.generate_content(prompt)
+            client = genai.Client(api_key=config.GEMINI_API_KEY)
+            response = client.models.generate_content(
+                model='gemini-2.0-flash',
+                contents=prompt
+            )
             
             text = response.text.strip()
             
-            # Parse response
-            english_part = ""
-            japanese_part = ""
+            # Parse response - English-only assessment
+            english_assessment = text.strip()
             
-            if "ENGLISH:" in text:
-                parts = text.split("ENGLISH:")
-                if len(parts) > 1:
-                    english_section = parts[1].split("JAPANESE:")[0].strip()
-                    english_part = english_section
-                    
-                    if "JAPANESE:" in text:
-                        japanese_part = text.split("JAPANESE:")[1].strip()
-            
-            if not english_part or not japanese_part:
+            if not english_assessment:
                 # Fallback if parsing fails
-                english_part = f"Student demonstrates {sum(skills.values())/len(skills):.1f}% average mastery in {track}. Focus on areas scoring below 70% for improvement."
-                japanese_part = f"{track}トラックでの平均習熟度は{sum(skills.values())/len(skills):.1f}%です。70%未満の分野に重点を置いて練習を続けてください。"
+                english_assessment = f"Student demonstrates {sum(skills.values())/len(skills):.1f}% average mastery in {track}. Focus on areas scoring below 70% for improvement."
             
-            return (english_part, japanese_part)
+            return english_assessment
             
         except Exception as e:
             import logging
@@ -298,10 +324,7 @@ Be encouraging but honest. Focus on strengths and specific areas for improvement
             logger.warning(f"Error generating LLM assessment: {e}")
             # Fallback
             avg_score = sum(skills.values())/len(skills)
-            return (
-                f"Student demonstrates {avg_score:.1f}% average mastery in {track}. Focus on areas scoring below 70% for improvement.",
-                f"{track}トラックでの平均習熟度は{avg_score:.1f}%です。70%未満の分野に重点を置いて練習を続けてください。"
-            )
+            return f"Student demonstrates {avg_score:.1f}% average mastery in {track}. Focus on areas scoring below 70% for improvement."
 
     def _create_bar_chart(self, mastery_scores: dict) -> Drawing:
         """
@@ -392,13 +415,12 @@ Be encouraging but honest. Focus on strengths and specific areas for improvement
         return career_readiness
 
     def _generate_pdf_report(self, candidate_id: str, mastery_scores: dict, output_path: str) -> str:
-        """Generate PDF report using reportlab with Japanese support."""
+        """Generate PDF report using reportlab - English-only report with standard fonts."""
         if not REPORTLAB_AVAILABLE:
             raise ImportError("reportlab is required for PDF generation. Install with: pip install reportlab")
         
-        # Register Japanese font
-        japanese_font_available = self._register_japanese_font()
-        japanese_font_name = 'JapaneseFont' if japanese_font_available else 'HeiseiKakuGo-W5'
+        # English-Only PDF Report: Remove Japanese font dependency
+        # Use standard fonts (Helvetica or Times-Roman) to eliminate 'Can't map' errors permanently
         
         # Get candidate info
         db = SessionLocal()
@@ -413,7 +435,7 @@ Be encouraging but honest. Focus on strengths and specific areas for improvement
         story = []
         styles = getSampleStyleSheet()
         
-        # Custom styles with Japanese font support
+        # Custom styles with standard fonts (English-only report)
         title_style = ParagraphStyle(
             'CustomTitle',
             parent=styles['Heading1'],
@@ -433,11 +455,12 @@ Be encouraging but honest. Focus on strengths and specific areas for improvement
             fontName='Helvetica-Bold'
         )
         
-        japanese_style = ParagraphStyle(
-            'JapaneseStyle',
+        # Assessment style using standard font (no Japanese font dependency)
+        assessment_style = ParagraphStyle(
+            'AssessmentStyle',
             parent=styles['Normal'],
             fontSize=11,
-            fontName=japanese_font_name if japanese_font_available else 'Helvetica',
+            fontName='Helvetica',  # Use standard Helvetica font
             leading=14
         )
         
@@ -560,14 +583,11 @@ Be encouraging but honest. Focus on strengths and specific areas for improvement
             story.append(Spacer(1, 0.15*inch))
             
             # LLM-Powered Bilingual Assessment
-            english_assessment, japanese_assessment = self._generate_llm_assessment(track, skills)
+            # English-only assessment (no Japanese)
+            english_assessment = self._generate_llm_assessment(track, skills)
             
             story.append(Paragraph("<b>Sensei's Assessment:</b>", styles['Normal']))
-            story.append(Paragraph(english_assessment, styles['Normal']))
-            if japanese_font_available:
-                story.append(Paragraph(japanese_assessment, japanese_style))
-            else:
-                story.append(Paragraph(f"[Japanese: {japanese_assessment}]", styles['Normal']))
+            story.append(Paragraph(english_assessment, assessment_style))
             
             story.append(Spacer(1, 0.2*inch))
         

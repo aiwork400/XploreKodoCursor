@@ -317,10 +317,9 @@ def render_concierge_avatar(talking: bool = False, show_intro_video: bool = Fals
         st.session_state.concierge_avatar_talking = True
     
     # Show intro video if requested (first time widget is activated)
-    if show_intro_video and intro_video_bytes:
-        st.sidebar.markdown("### 🎬 Welcome Video")
-        st.sidebar.video(intro_video_bytes, format="video/mp4", autoplay=True, start_time=0)
-        return  # Don't show static avatar when video is playing
+    # Video rendering is handled inside show_concierge_widget() sidebar block
+    # This function only handles static avatar rendering
+    pass
     
     # THE 'IS SPEAKING' LOGIC: Determine which image to show
     # Check if temp_voice.mp3 was modified in the last 10 seconds
@@ -438,17 +437,13 @@ def render_concierge_avatar(talking: bool = False, show_intro_video: bool = Fals
 
 def show_concierge_widget():
     """Display the ExploraKodo Concierge Widget - floating sidebar assistant."""
-    try:
-        # Make widget more visible with a clear header
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("### 🤖 ExploraKodo Concierge")
-        st.sidebar.markdown("*Your multilingual assistant*")
+    # HARD-OVERRIDE: Wrap the entire Concierge UI in a strict sidebar block
+    with st.sidebar:
+        st.header("ExploraKodo Concierge")
         
-        # Initialize session state for concierge
+        # Initialize session state for concierge (concierge_avatar_visible already initialized in main())
         if "concierge_language" not in st.session_state:
             st.session_state.concierge_language = "en"
-        if "concierge_avatar_visible" not in st.session_state:
-            st.session_state.concierge_avatar_visible = True
         if "concierge_messages" not in st.session_state:
             st.session_state.concierge_messages = []
         if "pending_user_input" not in st.session_state:
@@ -458,14 +453,14 @@ def show_concierge_widget():
         if "concierge_audio_output" not in st.session_state:
             st.session_state.concierge_audio_output = None
         
-        # Language Selector
+        # Language Selector - Moved to top for video-language sync
         language_options = {
-        'en': '🇺🇸 English',
-        'ja': '🇯🇵 日本語',
+            'en': '🇺🇸 English',
+            'ja': '🇯🇵 日本語',
             'ne': '🇳🇵 नेपाली'
         }
         
-        selected_lang = st.sidebar.selectbox(
+        selected_lang = st.selectbox(
             "🌐 Language",
             options=list(language_options.keys()),
             format_func=lambda x: language_options[x],
@@ -474,108 +469,52 @@ def show_concierge_widget():
         )
         st.session_state.concierge_language = selected_lang
         
-        # Avatar Toggle - with reinitialization on change
-        previous_avatar_visible = st.session_state.concierge_avatar_visible
-        st.session_state.concierge_avatar_visible = st.sidebar.checkbox(
-            "👨‍🏫 Show Avatar",
-            value=st.session_state.concierge_avatar_visible,
-            key="concierge_avatar_toggle"
-        )
+        # Map language code to full name for video selection
+        lang_name_map = {'en': 'us English', 'ja': 'Japanese', 'ne': 'Nepali'}
+        st.session_state.language = lang_name_map.get(selected_lang, 'us English')
         
-        # Reinitialize avatar when checkbox is toggled
-        if previous_avatar_visible != st.session_state.concierge_avatar_visible:
-            st.sidebar.markdown(
-                """
-                <script>
-                // Reinitialize avatar when checkbox is toggled
-                setTimeout(function() {
-                    if (window.reinitializeSenseiAvatar) {
-                        window.reinitializeSenseiAvatar();
-                    }
-                }, 200);
-                </script>
-                """,
-                unsafe_allow_html=True
-            )
+        # Avatar Toggle - Use checkbox without manually updating state (widget handles it)
+        st.checkbox("Show Avatar", key="concierge_avatar_visible")
         
-        st.sidebar.markdown("---")
-        
-        # Initialize video variables (must be outside try block for scope)
-        intro_video_bytes = None
-        show_video_in_avatar = False
-        
-        # Show welcome video and message if no conversation yet
-        try:
-            if not st.session_state.concierge_messages:
-                # Initialize welcome video played state
-                if "concierge_welcome_video_played" not in st.session_state:
-                    st.session_state.concierge_welcome_video_played = False
-                
-                # Welcome video based on language
-                intro_video_map = {
-                    "en": "assets/videos/intro/intro_en.mp4",
-                    "ja": "assets/videos/intro/intro_jp.mp4",
-                    "ne": "assets/videos/intro/intro_ne.mp4"
-                }
-                
-                intro_video_path = intro_video_map.get(st.session_state.concierge_language, intro_video_map["en"])
-                
-                # Video Path: Path is imported at top of file, so it's always available
-                intro_video_full_path = None
-                try:
-                    intro_video_full_path = Path(__file__).parent.parent / intro_video_path
-                    
-                    # Load video bytes if file exists (will be shown in avatar area)
-                    if intro_video_full_path.exists():
-                        try:
-                            with open(intro_video_full_path, "rb") as video_file:
-                                intro_video_bytes = video_file.read()
-                            st.session_state.concierge_welcome_video_played = True
-                            show_video_in_avatar = True
-                        except Exception as video_error:
-                            logger.warning(f"Error loading welcome video: {video_error}")
-                            intro_video_full_path = None
-                except Exception as path_error:
-                    logger.warning(f"Error creating video path: {path_error}")
-                    intro_video_full_path = None
-                
-                # Fallback to welcome message if video not found or error
-                if not show_video_in_avatar:
-                    welcome_messages = {
-                        "en": "👋 **Welcome!** I'm your ExploraKodo assistant. I can help with:\n\n• Platform features & navigation\n• Life-in-Japan advice\n• Language learning questions\n• General platform guidance\n\n**Try asking:** \"What can you help me with?\" or \"How does the virtual classroom work?\"",
-                        "ja": "👋 **ようこそ！** ExploraKodoアシスタントです。お手伝いできること：\n\n• プラットフォーム機能とナビゲーション\n• 日本での生活に関するアドバイス\n• 言語学習の質問\n• 一般的なプラットフォームガイダンス\n\n**試してみてください：** 「何をお手伝いできますか？」または「バーチャルクラスルームはどのように機能しますか？」",
-                        "ne": "👋 **स्वागत छ!** म तपाईंको ExploraKodo सहायक हुँ। म मद्दत गर्न सक्छु:\n\n• प्लेटफर्म सुविधाहरू र नेभिगेसन\n• जापानमा जीवन सल्लाह\n• भाषा सिकाइ प्रश्नहरू\n• सामान्य प्लेटफर्म मार्गदर्शन\n\n**प्रयास गर्नुहोस्:** \"तपाईं मलाई के मद्दत गर्न सक्नुहुन्छ?\" वा \"भर्चुअल कक्षा कसरी काम गर्छ?\""
-                    }
-                    st.sidebar.info(welcome_messages.get(st.session_state.concierge_language, welcome_messages["en"]))
-        except Exception as welcome_error:
-            logger.warning(f"Error in welcome section: {welcome_error}")
-            # Show fallback welcome message
-            st.sidebar.info("👋 **Welcome!** I'm your ExploraKodo assistant. How can I help you today?")
-        
-        # FORCE RENDERING: Render avatar at top of sidebar, outside conditional blocks
-        # Show intro video in avatar area if available, otherwise show static avatar
+        # Video rendering - ONLY if Show Avatar is checked
+        # Re-render on Change: When language changes, lang_map immediately updates v_file so video refreshes
         if st.session_state.concierge_avatar_visible:
-            if show_video_in_avatar and intro_video_bytes:
-                render_concierge_avatar(talking=False, show_intro_video=True, intro_video_bytes=intro_video_bytes)
+            # Pick ONLY the correct language file using lang_map (no looping)
+            # Use current language state which updates immediately when selector changes
+            lang_map = {'us English': 'intro_en.mp4', 'Japanese': 'intro_jp.mp4', 'Nepali': 'intro_ne.mp4'}
+            current_lang = st.session_state.get('language', 'us English')
+            v_file = lang_map.get(current_lang, 'intro_en.mp4')
+            
+            # Force layout inside sidebar with explicit height/width
+            video_path = Path(__file__).parent.parent / "assets" / "videos" / "intro" / v_file
+            if video_path.exists():
+                # Welcome Video header only visible if avatar is checked
+                st.markdown("### 🎬 Welcome Video")
+                video_html = f'''<video width="100%" height="250" controls style="object-fit: cover; border-radius: 10px;">
+                                 <source src="data:video/mp4;base64,{base64.b64encode(video_path.read_bytes()).decode()}" type="video/mp4">
+                                 </video>'''
+                st.components.v1.html(video_html, height=260)
             else:
-                render_concierge_avatar(talking=st.session_state.concierge_avatar_talking)
+                st.info(f"Video file not found: {v_file}")
+        
+        st.markdown("---")
         
         # Display conversation history
         if st.session_state.concierge_messages:
-            st.sidebar.markdown("**💬 Conversation History:**")
+            st.markdown("**💬 Conversation History:**")
             for msg in st.session_state.concierge_messages[-5:]:  # Show last 5 messages
                 if msg["role"] == "user":
-                    with st.sidebar.expander(f"**You:** {msg['content'][:60]}...", expanded=False):
+                    with st.expander(f"**You:** {msg['content'][:60]}...", expanded=False):
                         st.markdown(msg['content'])
                 else:
-                    with st.sidebar.expander(f"**🤖 Concierge:** {msg['content'][:60]}...", expanded=True):
+                    with st.expander(f"**🤖 Concierge:** {msg['content'][:60]}...", expanded=True):
                         st.markdown(msg['content'])
         
-        st.sidebar.markdown("---")
+        st.markdown("---")
         
         # Hybrid Input: Chat + Mic Recorder - ALWAYS VISIBLE
-        st.sidebar.markdown("**💬 Ask the Concierge:**")
-        input_method = st.sidebar.radio(
+        st.markdown("**💬 Ask the Concierge:**")
+        input_method = st.radio(
             "Input Method",
             ["💬 Text", "🎤 Voice"],
             key="concierge_input_method",
@@ -586,19 +525,19 @@ def show_concierge_widget():
         
         if input_method == "💬 Text":
             # Text input - use text_input with a send button (chat_input doesn't work in sidebar)
-            text_input = st.sidebar.text_input(
+            text_input = st.text_input(
                 "Type your message:",
                 key="concierge_text_input",
                 placeholder="Ask me anything about ExploraKodo..."
             )
-            send_button = st.sidebar.button("📤 Send", key="concierge_send_text", type="primary")
+            send_button = st.button("📤 Send", key="concierge_send_text", type="primary")
             if send_button and text_input:
                 user_input = text_input
             elif send_button and not text_input:
-                st.sidebar.warning("⚠️ Please enter a message before sending.")
+                st.warning("⚠️ Please enter a message before sending.")
         else:
             # Voice input using streamlit-mic-recorder
-            st.sidebar.markdown("**🎤 Voice Recording:**")
+            st.markdown("**🎤 Voice Recording:**")
             
             # Initialize recording state
             if "recorded_audio" not in st.session_state:
@@ -608,7 +547,7 @@ def show_concierge_widget():
                 from streamlit_mic_recorder import mic_recorder
                 
                 # Place mic_recorder in sidebar - this should render the button in the sidebar
-                st.sidebar.markdown("Click the button below to start recording:")
+                st.markdown("Click the button below to start recording:")
                 audio_data = mic_recorder(
                     key="concierge_voice_recorder",
                     start_prompt="🎤 Start Recording",
@@ -621,16 +560,16 @@ def show_concierge_widget():
                     st.session_state.recorded_audio = audio_data
                 
             except ImportError:
-                st.sidebar.warning("⚠️ streamlit-mic-recorder not installed")
-                st.sidebar.code("pip install streamlit-mic-recorder")
+                st.warning("⚠️ streamlit-mic-recorder not installed")
+                st.code("pip install streamlit-mic-recorder")
                 audio_data = None
             except Exception as e:
-                st.sidebar.warning(f"⚠️ Mic recorder error: {str(e)}")
+                st.warning(f"⚠️ Mic recorder error: {str(e)}")
                 audio_data = None
                 # Show fallback text input on error
-                st.sidebar.markdown("---")
-                st.sidebar.info("💡 Voice recording unavailable. Please use text input instead.")
-                fallback_text = st.sidebar.text_input("Type your message:", key="concierge_voice_fallback")
+                st.markdown("---")
+                st.info("💡 Voice recording unavailable. Please use text input instead.")
+                fallback_text = st.text_input("Type your message:", key="concierge_voice_fallback")
                 if fallback_text:
                     user_input = fallback_text
             
@@ -638,8 +577,8 @@ def show_concierge_widget():
             final_audio = st.session_state.recorded_audio if st.session_state.recorded_audio else audio_data
             
             if final_audio:
-                st.sidebar.markdown("---")
-                st.sidebar.success("✅ Recording complete! Listen to your recording:")
+                st.markdown("---")
+                st.success("✅ Recording complete! Listen to your recording:")
                 
                 # Playback audio - make it prominent
                 # Handle both dict format (from mic_recorder) and direct bytes
@@ -648,28 +587,28 @@ def show_concierge_widget():
                     # Ensure it's bytes, not base64 string
                     if isinstance(audio_bytes_for_playback, str):
                         audio_bytes_for_playback = base64.b64decode(audio_bytes_for_playback)
-                    st.sidebar.audio(audio_bytes_for_playback, format="audio/wav", autoplay=False)
-                    st.sidebar.caption("🔊 Click the play button above to hear your recording")
+                    st.audio(audio_bytes_for_playback, format="audio/wav", autoplay=False)
+                    st.caption("🔊 Click the play button above to hear your recording")
                 else:
-                    st.sidebar.warning("⚠️ Audio playback not available, but you can still send it for transcription.")
+                    st.warning("⚠️ Audio playback not available, but you can still send it for transcription.")
                 
                 # Show options
-                col1, col2 = st.sidebar.columns(2)
+                col1, col2 = st.columns(2)
                 with col1:
-                    if st.sidebar.button("🔄 Record Again", key="record_again_btn"):
+                    if st.button("🔄 Record Again", key="record_again_btn"):
                         st.session_state.recorded_audio = None
                         st.rerun()
                 
                 with col2:
-                    send_voice_btn = st.sidebar.button("📤 Send Voice", key="concierge_send_voice", type="primary")
+                    send_voice_btn = st.button("📤 Send Voice", key="concierge_send_voice", type="primary")
                 
                 # Process voice input when Send is clicked
                 if send_voice_btn:
-                    st.sidebar.info("🎤 Transcribing your voice...")
+                    st.info("🎤 Transcribing your voice...")
                     # Get audio bytes - handle both dict and bytes format
                     audio_bytes_for_transcription = final_audio.get("bytes") if isinstance(final_audio, dict) else final_audio
                     if not audio_bytes_for_transcription:
-                        st.sidebar.error("Error: No audio data found. Please record again.")
+                        st.error("Error: No audio data found. Please record again.")
                     else:
                         # Ensure it's bytes, not base64 string
                         if isinstance(audio_bytes_for_transcription, str):
@@ -680,22 +619,22 @@ def show_concierge_widget():
                             st.session_state.concierge_language
                         )
                         if transcribed and not transcribed.startswith("Error"):
-                            st.sidebar.success(f"✅ Transcribed: \"{transcribed}\"")
+                            st.success(f"✅ Transcribed: \"{transcribed}\"")
                             # Store transcribed text for processing
                             st.session_state.pending_user_input = transcribed
                             # Clear recorded audio after processing
                             st.session_state.recorded_audio = None
                             st.rerun()  # Rerun to process the transcribed text
                         elif transcribed and transcribed.startswith("Error"):
-                            st.sidebar.error(transcribed)
-                            st.sidebar.info("💡 Tip: Make sure you're speaking clearly and your microphone is working. You can also type your message below.")
+                            st.error(transcribed)
+                            st.info("💡 Tip: Make sure you're speaking clearly and your microphone is working. You can also type your message below.")
             else:
-                st.sidebar.caption("💡 Click the microphone button above to start recording.")
+                st.caption("💡 Click the microphone button above to start recording.")
             
             # Fallback text input if no audio recorded
             if not final_audio:
-                st.sidebar.markdown("---")
-                fallback_input = st.sidebar.text_input("Or type your message:", key="concierge_fallback_input")
+                st.markdown("---")
+                fallback_input = st.text_input("Or type your message:", key="concierge_fallback_input")
                 if fallback_input:
                     user_input = fallback_input
         
@@ -715,7 +654,7 @@ def show_concierge_widget():
             # Get response from SupportAgent with loading indicator
             # STATE LOGIC: Set avatar to talking while generating response
             st.session_state.concierge_avatar_talking = True
-            st.sidebar.info("🤖 Thinking...")
+            st.info("🤖 Thinking...")
             try:
                 response = get_concierge_response(user_input.strip(), st.session_state.concierge_language)
                 
@@ -726,16 +665,16 @@ def show_concierge_widget():
                 })
                 
                 # Display response prominently (will be shown in conversation history after rerun)
-                st.sidebar.success("✅ Response generated!")
-                st.sidebar.markdown("---")
-                st.sidebar.markdown("**🤖 Concierge Response:**")
-                st.sidebar.markdown(response)
-                st.sidebar.markdown("---")
+                st.success("✅ Response generated!")
+                st.markdown("---")
+                st.markdown("**🤖 Concierge Response:**")
+                st.markdown(response)
+                st.markdown("---")
                 
                 # TEXT-TO-VOICE TRIGGER: Generate TTS audio for both text and voice input
                 # This ensures the avatar talking animation is triggered
                 # AUDIO SYNC: Always generate audio, even in Text mode, to trigger isTalking animation
-                st.sidebar.info("🔊 Generating audio...")
+                st.info("🔊 Generating audio...")
                 audio_output = generate_trilingual_tts(response, st.session_state.concierge_language)
                 if audio_output:
                     # ROBUST FILE WRITING: Save audio as temp_voice.mp3 using absolute path
@@ -755,15 +694,15 @@ def show_concierge_widget():
                             os.fsync(f.fileno())  # Ensure OS has written to disk
                     except Exception as e:
                         logger.error(f"Failed to write audio file: {e}")
-                        st.sidebar.error(f"❌ Failed to save audio file: {e}")
+                        st.error(f"❌ Failed to save audio file: {e}")
                     
                     # ROBUST FILE WRITING: Verify file was created
                     if not temp_audio_path.exists():
                         logger.error('CRITICAL: Audio file not created!')
-                        st.sidebar.error("❌ CRITICAL: Audio file not created! TTS may have failed.")
+                        st.error("❌ CRITICAL: Audio file not created! TTS may have failed.")
                     elif temp_audio_path.stat().st_size == 0:
                         logger.error('CRITICAL: Audio file is 0 bytes!')
-                        st.sidebar.error("❌ CRITICAL: Audio file is 0 bytes! TTS generation may have failed.")
+                        st.error("❌ CRITICAL: Audio file is 0 bytes! TTS generation may have failed.")
                     else:
                         logger.info(f"Audio file created successfully: {temp_audio_path} ({temp_audio_path.stat().st_size} bytes)")
                     
@@ -793,7 +732,7 @@ def show_concierge_widget():
                     
                     # Display audio player with JavaScript to trigger avatar animation
                     # Use file path primarily, with base64 fallback
-                    st.sidebar.markdown(
+                    st.markdown(
                         f"""
                         <audio id="{audio_id}" controls autoplay style="width: 100%; margin-top: 10px;">
                             <source src="{audio_url}" type="audio/mp3" onerror="this.onerror=null; this.src='{audio_data_uri}';">
@@ -852,31 +791,22 @@ def show_concierge_widget():
                     # Store audio in session state for display below avatar
                     st.session_state.concierge_audio_output = audio_output
                     
-                    st.sidebar.success("✅ Audio ready! Avatar will animate while speaking.")
+                    st.success("✅ Audio ready! Avatar will animate while speaking.")
                 else:
-                    st.sidebar.warning("⚠️ Audio generation unavailable")
+                    st.warning("⚠️ Audio generation unavailable")
                 
             except Exception as e:
                 error_msg = f"Error: {str(e)}"
-                st.sidebar.error(error_msg)
+                st.error(error_msg)
                 st.session_state.concierge_messages.append({
                     "role": "assistant",
                     "content": error_msg
                 })
                 import traceback
                 if config.DEBUG:
-                    st.sidebar.code(traceback.format_exc())
+                    st.code(traceback.format_exc())
             
             st.rerun()
-    except Exception as e:
-        # Show error in sidebar if widget fails - but keep widget visible
-        st.sidebar.error(f"⚠️ Widget Error: {str(e)}")
-        import traceback
-        if config.DEBUG:
-            with st.sidebar.expander("Show Error Details"):
-                st.code(traceback.format_exc())
-        # Show a fallback simple input
-        st.sidebar.info("Please refresh the page. If the error persists, check the console.")
 
 
 def process_concierge_voice(audio_bytes: bytes, language: str) -> str:
@@ -1174,7 +1104,7 @@ ExploraKodo is a 360° AI-powered lifecycle platform for Nepali human capital pr
 **Response (in {language}):**"""
                     
                     ai_response = client.models.generate_content(
-                        model="gemini-2.5-flash",
+                        model="gemini-2.0-flash",
                         contents=prompt
                     )
                     
@@ -1231,7 +1161,7 @@ Provide a helpful, friendly response that:
 Response (in {language}):"""
                 
                 ai_response = client.models.generate_content(
-                    model="gemini-2.5-flash",
+                    model="gemini-2.0-flash",
                     contents=prompt
                 )
                 
@@ -1336,6 +1266,10 @@ def generate_trilingual_tts(text: str, language: str, track: str | None = None) 
 # Main App
 def main():
     """Main Streamlit app."""
+    # ATOMIC FIX: Initialize session state at the very top, before any UI calls
+    if 'concierge_avatar_visible' not in st.session_state:
+        st.session_state.concierge_avatar_visible = True
+    
     st.markdown('<h1 class="main-header">🌏 ExploraKodo Global Command Center</h1>', unsafe_allow_html=True)
 
     # Sidebar navigation
@@ -1365,16 +1299,18 @@ def main():
     
     # Show Concierge Widget (after page selection to avoid conflicts)
     # Always show widget - it's a core feature
+    # HARD-OVERRIDE: Widget is wrapped in strict sidebar block inside show_concierge_widget()
     try:
         show_concierge_widget()
     except Exception as e:
         # If widget fails completely, show a fallback message
-        st.sidebar.markdown("---")
-        st.sidebar.error(f"⚠️ Concierge Widget Error: {str(e)}")
-        import traceback
-        if config.DEBUG:
-            with st.sidebar.expander("Debug Info"):
-                st.code(traceback.format_exc())
+        with st.sidebar:
+            st.markdown("---")
+            st.error(f"⚠️ Concierge Widget Error: {str(e)}")
+            import traceback
+            if config.DEBUG:
+                with st.expander("Debug Info"):
+                    st.code(traceback.format_exc())
 
     # Page routing with error handling
     try:
@@ -1745,13 +1681,12 @@ def generate_weak_point_summary(mastery_scores: dict, candidate_id: str) -> str:
     Generate AI-powered summary of weak points and recommendations.
     """
     try:
-        import google.generativeai as genai
+        from google import genai
         
         if not config.GEMINI_API_KEY:
             return _generate_fallback_summary(mastery_scores)
         
-        genai.configure(api_key=config.GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-pro')
+        client = genai.Client(api_key=config.GEMINI_API_KEY)
         
         # Build summary of scores
         score_summary = []
@@ -1775,7 +1710,10 @@ Format: "Sensei says: [your summary]"
 
 Be encouraging and specific. Use the track names and skill categories from the data."""
         
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents=prompt
+        )
         summary = response.text.strip()
         
         # Clean up the response
@@ -2049,7 +1987,7 @@ def show_video_hub():
     track_options = {
         "Care-giving": "🏥 Care-giving (Kaigo Training)",
         "Academic": "📖 Academic Preparation",
-        "Food/Tech": "🍜 Food/Tech Industry Training"
+        "Food/Tech": "🍜 Food/Tech (Commercial Centers)"
     }
     
     selected_track = st.radio(
@@ -2138,20 +2076,23 @@ def show_video_hub():
         st.markdown("---")
         
         # Video Player with JSON-based event listener
+        # Create JSON event data for Practice Now button (always available)
+        event_data = {
+            "track": selected_track,
+            "language": selected_language,
+            "lesson_id": selected_lesson.get('id'),
+            "topic": selected_lesson.get('topic', 'knowledge_base'),
+            "lesson_title": selected_lesson.get('lesson_title', 'Current Lesson')
+        }
+        
         video_path = selected_lesson.get('video_path')
+        video_available = False
+        
         if video_path:
             # Check if file exists
             full_path = Path(__file__).parent.parent / video_path
             if full_path.exists():
-                # Create JSON event data for Practice Now button
-                event_data = {
-                    "track": selected_track,
-                    "language": selected_language,
-                    "lesson_id": selected_lesson.get('id'),
-                    "topic": selected_lesson.get('topic', 'knowledge_base'),
-                    "lesson_title": selected_lesson.get('lesson_title', 'Current Lesson')
-                }
-                
+                video_available = True
                 # Video container with Practice Now button
                 st.markdown("### 🎬 Video Player")
                 
@@ -2163,7 +2104,7 @@ def show_video_hub():
                 video_id = f"video_player_{selected_lesson.get('id')}"
                 with open(full_path, "rb") as video_file:
                     video_bytes = video_file.read()
-                    st.video(video_bytes, format="video/mp4", key=video_id)
+                    st.video(video_bytes, format="video/mp4", autoplay=True, muted=True, key=video_id)
                 
                 # Hidden input for timestamp capture (will be updated by JavaScript)
                 # Note: Full JavaScript-to-Python communication requires a custom Streamlit component
@@ -2171,39 +2112,6 @@ def show_video_hub():
                 timestamp_input_key = f"video_timestamp_{selected_lesson.get('id')}"
                 if timestamp_input_key not in st.session_state:
                     st.session_state[timestamp_input_key] = 0.0
-                
-                # Practice Now button with JSON event trigger
-                st.markdown("---")
-                col1, col2, col3 = st.columns([1, 2, 1])
-                with col2:
-                    practice_button = st.button(
-                        "🎯 Practice Now",
-                        key=f"practice_now_{selected_lesson.get('id')}",
-                        type="primary",
-                        width='stretch'
-                    )
-                    
-                    if practice_button:
-                        # Capture timestamp from JavaScript
-                        # Note: Due to Streamlit's architecture, we use a workaround
-                        # The JavaScript stores the timestamp in window.videoCurrentTime
-                        # In a production environment, you would use a custom Streamlit component
-                        # For now, we'll use the session state value or default to 0
-                        timestamp_key = f"video_timestamp_{selected_lesson.get('id')}"
-                        timestamp = st.session_state.get(timestamp_key, 0.0)
-                        
-                        # Also try to get from the global video timestamp
-                        if hasattr(st.session_state, 'video_hub_current_timestamp'):
-                            timestamp = st.session_state.video_hub_current_timestamp
-                        
-                        # Trigger Socratic Assessment with current timestamp
-                        st.session_state.video_hub_practice_triggered = True
-                        st.session_state.video_hub_practice_topic = selected_lesson.get('topic', 'knowledge_base')
-                        st.session_state.video_hub_practice_track = selected_track
-                        st.session_state.video_hub_practice_timestamp = timestamp
-                        st.session_state.video_hub_feedback_acknowledged = False
-                        st.session_state.video_hub_can_resume = False
-                        st.rerun()
                 
                 # JavaScript for capturing video timestamp and JSON-based event listener
                 st.markdown(
@@ -2272,9 +2180,84 @@ def show_video_hub():
                 # For production, consider using streamlit-component-template to create
                 # a custom component that can communicate JavaScript values to Python
             else:
-                st.error(f"Video file not found: {video_path}")
+                # Fallback: Show static image when video file not found
+                st.markdown("### 🎬 Lesson Content")
+                st.warning(f"⚠️ Video file not found: {video_path}")
+                # Try to load a static image fallback
+                static_image_paths = [
+                    Path(__file__).parent.parent / "assets" / "images" / "lesson_placeholder.png",
+                    Path(__file__).parent.parent / "assets" / "images" / "lesson_placeholder.jpg",
+                    Path(__file__).parent.parent / "assets" / "logo.png",
+                ]
+                image_found = False
+                for img_path in static_image_paths:
+                    if img_path.exists():
+                        st.image(str(img_path), caption=f"Lesson: {selected_lesson.get('lesson_title', 'Current Lesson')}")
+                        image_found = True
+                        break
+                if not image_found:
+                    # Create a simple placeholder using markdown
+                    st.markdown(f"""
+                    <div style="text-align: center; padding: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px;">
+                        <h3 style="color: white;">📚 {selected_lesson.get('lesson_title', 'Current Lesson')}</h3>
+                        <p style="color: white;">Video content unavailable. Socratic assessment is still available below.</p>
+                    </div>
+                    """, unsafe_allow_html=True)
         else:
-            st.warning("No video path specified for this lesson.")
+            # Fallback: Show static image when no video path specified
+            st.markdown("### 🎬 Lesson Content")
+            st.warning("⚠️ No video path specified for this lesson.")
+            # Try to load a static image fallback
+            static_image_paths = [
+                Path(__file__).parent.parent / "assets" / "images" / "lesson_placeholder.png",
+                Path(__file__).parent.parent / "assets" / "images" / "lesson_placeholder.jpg",
+                Path(__file__).parent.parent / "assets" / "logo.png",
+            ]
+            image_found = False
+            for img_path in static_image_paths:
+                if img_path.exists():
+                    st.image(str(img_path), caption=f"Lesson: {selected_lesson.get('lesson_title', 'Current Lesson')}")
+                    image_found = True
+                    break
+            if not image_found:
+                # Create a simple placeholder using markdown
+                st.markdown(f"""
+                <div style="text-align: center; padding: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px;">
+                    <h3 style="color: white;">📚 {selected_lesson.get('lesson_title', 'Current Lesson')}</h3>
+                    <p style="color: white;">Video content unavailable. Socratic assessment is still available below.</p>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        # Practice Now button - ALWAYS VISIBLE (not conditional on video)
+        st.markdown("---")
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            practice_button = st.button(
+                "🎯 Practice Now",
+                key=f"practice_now_{selected_lesson.get('id')}",
+                type="primary",
+                width='stretch'
+            )
+            
+            if practice_button:
+                # Capture timestamp from JavaScript (if video available)
+                timestamp = 0.0
+                if video_available:
+                    timestamp_key = f"video_timestamp_{selected_lesson.get('id')}"
+                    timestamp = st.session_state.get(timestamp_key, 0.0)
+                    
+                    # Also try to get from the global video timestamp
+                    if hasattr(st.session_state, 'video_hub_current_timestamp'):
+                        timestamp = st.session_state.video_hub_current_timestamp
+                
+                # Trigger Socratic Assessment with current timestamp (0.0 if no video)
+                st.session_state.video_hub_practice_triggered = True
+                st.session_state.video_hub_practice_topic = selected_lesson.get('topic', 'knowledge_base')
+                st.session_state.video_hub_practice_track = selected_track
+                st.session_state.video_hub_practice_timestamp = timestamp
+                st.session_state.video_hub_feedback_acknowledged = False
+                st.session_state.video_hub_can_resume = False
+                st.rerun()
         
         # Socratic Assessment Section (triggered by Practice Now)
         if st.session_state.video_hub_practice_triggered:
@@ -2536,8 +2519,8 @@ def show_live_simulator():
         "This simulates candidate interactions with the Phase 2 immersive training features."
     )
 
-    # API endpoint configuration
-    api_base_url = st.text_input("API Base URL", "http://localhost:8000", help="Base URL for the FastAPI server")
+    # API endpoint configuration - hardcode to 127.0.0.1:8000 for stable routing
+    api_base_url = "http://127.0.0.1:8000"
 
     # Candidate selection
     db = get_db_session()

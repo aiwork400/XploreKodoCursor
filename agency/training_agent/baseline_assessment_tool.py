@@ -143,7 +143,7 @@ class RunBaselineAssessment(BaseTool):
 Provide ONLY the JSON response, no additional text or explanations."""
             
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.0-flash",
                 contents=prompt
             )
             
@@ -220,7 +220,7 @@ Provide ONLY the JSON response, no additional text or explanations."""
 Provide ONLY the JSON response, no additional text."""
             
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.0-flash",
                 contents=prompt
             )
             
@@ -308,7 +308,7 @@ IMPORTANT: Use XPLOREKODO_STRICT grading standard (15% harder than JLPT standard
 Provide ONLY the JSON response, no additional text."""
             
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.0-flash",
                 contents=prompt
             )
             
