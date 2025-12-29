@@ -173,102 +173,65 @@ class GeneratePerformanceReport(BaseTool):
 
     def _calculate_mastery_scores(self, candidate_id: str) -> dict:
         """
-        Calculate mastery scores (same logic as dashboard).
-        Returns dict with track -> skill -> score mapping.
+        Get mastery scores from CurriculumProgress.mastery_scores JSON field.
+        
+        Returns dict with track -> skill -> score mapping from PostgreSQL.
         """
         db: Session = SessionLocal()
         try:
+            import json
+            
+            # Get curriculum progress - refresh to ensure latest data
             curriculum = db.query(CurriculumProgress).filter(
                 CurriculumProgress.candidate_id == candidate_id
             ).first()
             
-            if not curriculum or not curriculum.dialogue_history:
-                tracks = ["Care-giving", "Academic", "Food/Tech"]
+            if not curriculum:
+                # Return default scores if no curriculum found
+                tracks = ["Food/Tech", "Academic", "Care-giving"]
                 skills = ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]
                 return {
                     track: {skill: 0.0 for skill in skills}
                     for track in tracks
                 }
             
-            dialogue_history = curriculum.dialogue_history or []
-            tracks = ["Care-giving", "Academic", "Food/Tech"]
+            # Refresh to ensure we have the latest mastery_scores from database
+            db.refresh(curriculum)
+            
+            # Get mastery_scores from JSON field
+            mastery_scores = curriculum.mastery_scores
+            
+            # Handle different data types (dict, string, None)
+            if mastery_scores is None:
+                mastery_scores = {}
+            elif isinstance(mastery_scores, str):
+                try:
+                    mastery_scores = json.loads(mastery_scores)
+                except json.JSONDecodeError:
+                    mastery_scores = {}
+            elif not isinstance(mastery_scores, dict):
+                mastery_scores = {}
+            
+            # Initialize default structure
+            tracks = ["Food/Tech", "Academic", "Care-giving"]
             skills = ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]
             
-            track_scores = {
-                track: {skill: [] for skill in skills}
-                for track in tracks
-            }
-            
-            for entry in dialogue_history:
-                track = None
-                if "session_snapshot" in entry:
-                    track = entry["session_snapshot"].get("track")
-                elif "track" in entry:
-                    track = entry.get("track")
-                
-                if not track or track not in tracks:
-                    continue
-                
-                evaluation = entry.get("evaluation")
-                if not evaluation:
-                    continue
-                
-                status = evaluation.get("status", "")
-                feedback = evaluation.get("feedback", "").lower()
-                explanation = evaluation.get("explanation", "").lower()
-                affected_skills = evaluation.get("affected_skills", [])
-                
-                if not affected_skills:
-                    vocab_keywords = ["vocabulary", "terminology", "word", "term"]
-                    tone_keywords = ["tone", "honorific", "desu", "masu", "keigo"]
-                    logic_keywords = ["meaning", "context", "logic", "understand"]
-                    
-                    if any(kw in feedback or kw in explanation for kw in vocab_keywords):
-                        affected_skills.append("Vocabulary")
-                    if any(kw in feedback or kw in explanation for kw in tone_keywords):
-                        affected_skills.append("Tone/Honorifics")
-                    if any(kw in feedback or kw in explanation for kw in logic_keywords):
-                        affected_skills.append("Contextual Logic")
-                    
-                    if not affected_skills:
-                        affected_skills = ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]
-                
-                if status == "Acceptable":
-                    score = 100.0
-                elif status == "Partially Acceptable":
-                    score = 50.0
-                elif status == "Non-Acceptable":
-                    score = 0.0
-                else:
-                    score = 50.0
-                
-                if status in ["Partially Acceptable", "Non-Acceptable"]:
-                    for skill in affected_skills:
-                        if skill in track_scores[track]:
-                            track_scores[track][skill].append(score)
-                else:
-                    track_scores[track]["Vocabulary"].append(score)
-                    track_scores[track]["Tone/Honorifics"].append(score)
-                    track_scores[track]["Contextual Logic"].append(score)
-            
-            mastery_scores = {}
+            # Ensure all tracks and skills exist with default values
+            result = {}
             for track in tracks:
-                mastery_scores[track] = {}
+                result[track] = {}
+                track_data = mastery_scores.get(track, {})
                 for skill in skills:
-                    scores = track_scores[track][skill]
-                    if scores:
-                        avg_score = sum(scores) / len(scores)
-                        mastery_scores[track][skill] = round(avg_score, 1)
-                    else:
-                        mastery_scores[track][skill] = 0.0
+                    result[track][skill] = float(track_data.get(skill, 0.0))
             
-            return mastery_scores
+            return result
             
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)
-            logger.error(f"Error calculating mastery scores: {e}")
-            tracks = ["Care-giving", "Academic", "Food/Tech"]
+            logger.error(f"Error getting mastery scores from CurriculumProgress: {e}")
+            # Return default structure on error
+            tracks = ["Food/Tech", "Academic", "Care-giving"]
             skills = ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]
             return {
                 track: {skill: 0.0 for skill in skills}

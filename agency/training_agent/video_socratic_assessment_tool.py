@@ -16,10 +16,20 @@ from typing import Literal, Optional
 from agency_swarm.tools import BaseTool
 from pydantic import Field
 from sqlalchemy.orm import Session
+from pathlib import Path
+import os
 
 import config
 from database.db_manager import Candidate, CurriculumProgress, SessionLocal
 from models.curriculum import Syllabus
+
+# Try to import google-cloud-translate for multilingual support
+try:
+    from google.cloud import translate_v2 as translate
+    GOOGLE_TRANSLATE_AVAILABLE = True
+except ImportError:
+    GOOGLE_TRANSLATE_AVAILABLE = False
+    translate = None
 
 # Try to import Gemini for evaluation
 try:
@@ -56,6 +66,9 @@ class VideoSocraticAssessmentTool(BaseTool):
     start_new_session: bool = Field(
         default=True, description="If True, starts a new Socratic dialogue session"
     )
+    language: Optional[str] = Field(
+        default="en", description="Language code for question translation ('en', 'ja', 'ne'). Questions are translated but PDF assessments remain in English."
+    )
 
     def _get_initial_question(self, topic: str, db: Session) -> Optional[str]:
         """
@@ -67,7 +80,7 @@ class VideoSocraticAssessmentTool(BaseTool):
         try:
             # Food/Tech Track Default: Temperature log scenario for HACCP training
             if self.track == "Food/Tech" and (not topic or topic == "food_safety" or topic == "haccp"):
-                return "The temperature log shows the walk-in freezer at -10°C. Is this acceptable under Japanese standards? If not, what is the corrective action?"
+                return "Welcome. I see the walk-in freezer is at -10°C today. Is this acceptable in a Japanese commercial kitchen? What is your next step?"
             
             # Check if this topic has an initial question in the Syllabus
             syllabus_entry = db.query(Syllabus).filter(
@@ -98,13 +111,104 @@ class VideoSocraticAssessmentTool(BaseTool):
             logger.warning(f"Error getting initial question: {e}")
             return None
 
+    def _translate_text(self, text: str, target_language: str) -> str:
+        """
+        Translate text using Google Cloud Translate API.
+        
+        For multilingual support: Questions are translated based on user's language selection,
+        but PDF assessments remain in English.
+        
+        Language codes: 'en' (English), 'ja' (Japanese), 'ne' (Nepali)
+        """
+        if target_language == "en" or not text:
+            return text
+        
+        if not GOOGLE_TRANSLATE_AVAILABLE:
+            # Fallback: Return placeholder translation
+            if target_language == "ja":
+                return f"[Japanese Translation: {text}]"
+            elif target_language == "ne":
+                return f"[Nepali Translation: {text}]"
+            return text
+        
+        # Check if project ID is configured
+        project_id = config.GOOGLE_CLOUD_TRANSLATE_PROJECT_ID
+        credentials_path = config.GOOGLE_CLOUD_TRANSLATE_CREDENTIALS_PATH
+        
+        if not project_id:
+            # Fallback: Return placeholder translation
+            if target_language == "ja":
+                return f"[Japanese Translation: {text}]"
+            elif target_language == "ne":
+                return f"[Nepali Translation: {text}]"
+            return text
+        
+        try:
+            # Initialize translation client
+            client = None
+            project_root = Path(__file__).parent.parent.parent
+            
+            # Try credentials path from config
+            if credentials_path:
+                creds_path = Path(credentials_path)
+                if not creds_path.is_absolute():
+                    creds_path = project_root / credentials_path
+                
+                if creds_path.exists():
+                    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = str(creds_path)
+                    client = translate.Client.from_service_account_json(str(creds_path))
+            
+            # If no client yet, try default credentials file location
+            if client is None:
+                default_creds = project_root / "google_creds.json"
+                if default_creds.exists():
+                    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = str(default_creds)
+                    client = translate.Client.from_service_account_json(str(default_creds))
+            
+            # If still no client, try environment variable
+            if client is None and os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
+                env_creds = Path(os.environ['GOOGLE_APPLICATION_CREDENTIALS'])
+                if env_creds.exists():
+                    client = translate.Client()
+            
+            # Last resort: use project ID only (requires default credentials)
+            if client is None:
+                client = translate.Client(project=project_id)
+            
+            # Perform translation
+            # Language codes: 'ja' for Japanese, 'ne' for Nepali
+            result = client.translate(text, target_language=target_language)
+            translated_text = result.get("translatedText", text)
+            
+            # Ensure we return the translated text
+            if translated_text and translated_text != text:
+                return translated_text
+            else:
+                return translated_text if translated_text else text
+            
+        except Exception as e:
+            # Log error but don't fail - return placeholder
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Translation error: {e}")
+            if target_language == "ja":
+                return f"[Japanese Translation: {text}]"
+            elif target_language == "ne":
+                return f"[Nepali Translation: {text}]"
+            return text
+
     def _get_probing_question(self, topic: str, db: Session) -> Optional[str]:
         """
         Get probing question for high-stakes scenarios.
         
         Checks the Syllabus table for scenarios with probing questions.
+        For Food/Tech track, provides sanitization follow-up after freezer question.
         """
         try:
+            # Food/Tech Track: Sanitization follow-up question
+            if self.track == "Food/Tech" and (not topic or topic == "food_safety" or topic == "haccp"):
+                return "Correct. Now, let's talk about surface hygiene. You are cleaning a prep table. Can you explain the difference between Seiso (Cleaning) and Sakkin (Disinfection) in a Japanese kitchen? Why is air-drying (Kansou) better than using a towel?"
+            
             # Check if this topic has a probing question in the Syllabus
             syllabus_entry = db.query(Syllabus).filter(
                 Syllabus.topic == topic,
@@ -178,7 +282,15 @@ class VideoSocraticAssessmentTool(BaseTool):
                 },
                 "Food/Tech": {
                     "tone_requirement": "Use professional workplace language. Can use Plain form in technical contexts, but Desu/Masu for customer-facing situations.",
-                    "vocabulary_focus": "Japanese Food Safety (HACCP) terminology, Kitchen Operations vocabulary, temperature monitoring, food handling protocols, sanitation procedures, Commercial Center standards"
+                    "vocabulary_focus": "Japanese Food Safety (HACCP) terminology, Kitchen Operations vocabulary, temperature monitoring, food handling protocols, sanitation procedures, Commercial Center standards",
+                    "vocabulary_bonus_terms": [
+                        "Kousa-osen (Cross-contamination)",
+                        "Kigen-kanri (Expiry/Limit management)",
+                        "Shudoku (Disinfection)",
+                        "Seiso (Cleaning)",
+                        "Sakkin (Disinfection)",
+                        "Kansou (Air-drying)"
+                    ]
                 }
             }
             
@@ -199,12 +311,14 @@ class VideoSocraticAssessmentTool(BaseTool):
    - Appropriate tone ({track_info['tone_requirement']})
    - Grammar is correct
    - Meaning is clear and accurate
+   {f"**BONUS:** If the candidate uses any of these Japanese HACCP terms, increase the Vocabulary score: {', '.join(track_info.get('vocabulary_bonus_terms', []))}" if track == "Food/Tech" and track_info.get('vocabulary_bonus_terms') else ""}
 
 2. **Partially Acceptable**:
    - Grammar is correct
    - BUT tone is wrong (e.g., used Plain form when Desu/Masu was required, or vice versa)
    - OR vocabulary is slightly off but meaning is preserved
    - Meaning is still understandable
+   {f"**NOTE:** If candidate uses bonus vocabulary terms ({', '.join(track_info.get('vocabulary_bonus_terms', []))}), consider upgrading to 'Acceptable' if other criteria are met." if track == "Food/Tech" and track_info.get('vocabulary_bonus_terms') else ""}
 
 3. **Non-Acceptable**:
    - Meaning is lost or incorrect
@@ -215,6 +329,7 @@ class VideoSocraticAssessmentTool(BaseTool):
 **Track-Specific Requirements:**
 - Tone: {track_info['tone_requirement']}
 - Vocabulary Focus: {track_info['vocabulary_focus']}
+{f"**Vocabulary Bonus Terms (increase Vocabulary score if used):** {', '.join(track_info.get('vocabulary_bonus_terms', []))}" if track == "Food/Tech" and track_info.get('vocabulary_bonus_terms') else ""}
 
 Evaluate the candidate's response and provide:
 1. Status: One of "Acceptable", "Partially Acceptable", or "Non-Acceptable"
@@ -259,6 +374,23 @@ Respond in JSON format:
                 # Validate affected_skills
                 valid_skills = ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]
                 affected_skills = [s for s in affected_skills if s in valid_skills]
+                
+                # Food/Tech Track: Check for vocabulary bonus terms
+                if track == "Food/Tech" and "Vocabulary" not in affected_skills:
+                    bonus_terms = track_context.get("Food/Tech", {}).get("vocabulary_bonus_terms", [])
+                    response_lower = candidate_response.lower()
+                    # Check if any bonus terms are mentioned
+                    for term in bonus_terms:
+                        # Extract Japanese term (e.g., "Kousa-osen" from "Kousa-osen (Cross-contamination)")
+                        japanese_term = term.split("(")[0].strip().lower()
+                        if japanese_term in response_lower or term.lower() in response_lower:
+                            if "Vocabulary" not in affected_skills:
+                                affected_skills.append("Vocabulary")
+                            # Boost status if using bonus vocabulary
+                            if status == "Partially Acceptable":
+                                # Note: We can't change status here, but we can add Vocabulary to affected_skills
+                                pass
+                            break
                 
                 # If no skills specified but status is not Acceptable, infer from feedback
                 if not affected_skills and status != "Acceptable":
@@ -310,6 +442,97 @@ Respond in JSON format:
                 "affected_skills": ["Vocabulary", "Tone/Honorifics", "Contextual Logic"],
                 "can_resume_video": False
             }
+    
+    def _update_mastery_scores(
+        self,
+        db: Session,
+        curriculum: CurriculumProgress,
+        track: str,
+        evaluation: dict
+    ):
+        """
+        Update mastery scores in CurriculumProgress.mastery_scores JSON field.
+        
+        Maps evaluation status to progress increments:
+        - Acceptable → +20%
+        - Partially Acceptable → +10%
+        - Non-Acceptable → +0%
+        
+        Args:
+            db: Database session
+            curriculum: CurriculumProgress object
+            track: Track name (Food/Tech, Academic, Care-giving)
+            evaluation: Evaluation dictionary with status and affected_skills
+        """
+        try:
+            import json
+            
+            status = evaluation.get("status", "")
+            affected_skills = evaluation.get("affected_skills", [])
+            
+            # Map status to progress increment (0-100%)
+            if status == "Acceptable":
+                increment = 20.0  # 20% progress increment
+            elif status == "Partially Acceptable":
+                increment = 10.0  # 10% progress increment
+            elif status == "Non-Acceptable":
+                increment = 0.0  # 0% progress increment
+            else:
+                increment = 5.0  # Default small increment
+            
+            # Get or initialize mastery_scores
+            mastery_scores = curriculum.mastery_scores
+            if mastery_scores is None:
+                mastery_scores = {}
+            elif isinstance(mastery_scores, str):
+                # If stored as string, parse it
+                try:
+                    mastery_scores = json.loads(mastery_scores)
+                except json.JSONDecodeError:
+                    mastery_scores = {}
+            elif not isinstance(mastery_scores, dict):
+                mastery_scores = {}
+            
+            # Initialize track if not exists
+            if track not in mastery_scores:
+                mastery_scores[track] = {}
+            
+            valid_skills = ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]
+            
+            # Update scores for affected skills
+            if affected_skills:
+                # Update only affected skills
+                for skill in affected_skills:
+                    if skill in valid_skills:
+                        current_score = float(mastery_scores[track].get(skill, 0.0))
+                        new_score = min(100.0, current_score + increment)
+                        mastery_scores[track][skill] = round(new_score, 1)
+            else:
+                # If no specific skills affected, update all skills
+                for skill in valid_skills:
+                    current_score = float(mastery_scores[track].get(skill, 0.0))
+                    new_score = min(100.0, current_score + increment)
+                    mastery_scores[track][skill] = round(new_score, 1)
+            
+            # Save back to database - SQLAlchemy will detect the change
+            curriculum.mastery_scores = mastery_scores
+            db.add(curriculum)  # Ensure object is tracked
+            db.flush()  # Flush to ensure changes are visible
+            db.commit()
+            
+            # Refresh the object to ensure we have the latest data
+            db.refresh(curriculum)
+            
+            # Log successful update for debugging
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"✅ Updated mastery scores for {self.candidate_id} in {track} track: {mastery_scores[track]}")
+                    
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error updating mastery scores in CurriculumProgress: {e}")
+            # Don't fail the assessment if database update fails
 
     def run(self) -> str:
         """
@@ -382,6 +605,9 @@ Respond in JSON format:
                     curriculum.dialogue_history = dialogue_history
                     db.commit()
                     
+                    # Update mastery scores in CurriculumProgress
+                    self._update_mastery_scores(db, curriculum, self.track, evaluation)
+                    
                     # Build response message
                     result = f"### 📝 Response Evaluation\n\n"
                     result += f"**Status:** {evaluation['status']}\n\n"
@@ -392,16 +618,27 @@ Respond in JSON format:
                     
                     # Probing Logic: If response is Acceptable or Partially Acceptable, ask follow-up
                     if probing_question and (evaluation['status'] == "Acceptable" or evaluation['status'] == "Partially Acceptable"):
+                        # Store original English question for evaluation
+                        probing_question_english = probing_question  # Keep original for evaluation
+                        
+                        # Translate follow-up question if language is not English
+                        display_question = probing_question_english
+                        if self.language and self.language != "en":
+                            display_question = self._translate_text(probing_question_english, self.language)
+                        
                         result += "---\n\n"
                         result += "🔍 **Follow-up Question (Probing Logic):**\n\n"
-                        result += f"{probing_question}\n\n"
+                        result += f"{display_question}\n\n"
                         result += "Please provide your response to this follow-up question.\n\n"
                         
                         # Add probing question to dialogue history
+                        # Store both original (English) and translated versions
                         probing_entry = {
                             "question_id": f"video_probing_{len(dialogue_history) + 1}",
                             "question": {
-                                "text": probing_question,
+                                "text": probing_question_english,  # Original English for evaluation
+                                "translated_text": display_question if self.language != "en" else None,
+                                "language": self.language,
                                 "type": "probing",
                                 "context": "Follow-up question based on initial response"
                             },
@@ -471,6 +708,9 @@ Respond in JSON format:
                 if initial_question:
                     # Use initial question from Syllabus
                     question_text = initial_question
+                    # Translate question if language is not English
+                    if self.language and self.language != "en":
+                        question_text = self._translate_text(question_text, self.language)
                     question_data = {
                         "text": question_text,
                         "type": "initial",
@@ -479,6 +719,14 @@ Respond in JSON format:
                 else:
                     # Get question using SocraticQuestioningTool's logic
                     question_data = socratic_tool._get_question_by_topic(self.topic, len(dialogue_history), db)
+                    # Translate question if language is not English
+                    if question_data and self.language and self.language != "en":
+                        original_text = question_data.get("text", question_data.get("question", ""))
+                        if original_text:
+                            translated_text = self._translate_text(original_text, self.language)
+                            question_data["text"] = translated_text
+                            if "question" in question_data:
+                                question_data["question"] = translated_text
                 
                 if not question_data:
                     return "No questions available for this topic. Please try a different topic."

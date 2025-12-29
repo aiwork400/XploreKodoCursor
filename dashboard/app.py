@@ -1537,136 +1537,72 @@ def show_wisdom_hub():
 
 def calculate_mastery_scores(candidate_id: str) -> dict:
     """
-    Calculate mastery scores (0-100%) for each track and skill category.
+    Get mastery scores (0-100%) from CurriculumProgress.mastery_scores JSON field.
     
     Returns:
         {
-            "Care-giving": {
+            "Food/Tech": {
                 "Vocabulary": 75.0,
                 "Tone/Honorifics": 60.0,
                 "Contextual Logic": 80.0
             },
             "Academic": {...},
-            "Food/Tech": {...}
+            "Care-giving": {...}
         }
     """
     db = get_db_session()
     try:
-        # Get curriculum progress
+        import json
+        
+        # Get curriculum progress - refresh to ensure latest data
         curriculum = db.query(CurriculumProgress).filter(
             CurriculumProgress.candidate_id == candidate_id
         ).first()
         
-        if not curriculum or not curriculum.dialogue_history:
-            # Return default scores if no data
-            tracks = ["Care-giving", "Academic", "Food/Tech"]
+        if not curriculum:
+            # Return default scores if no curriculum found
+            tracks = ["Food/Tech", "Academic", "Care-giving"]
             skills = ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]
             return {
                 track: {skill: 0.0 for skill in skills}
                 for track in tracks
             }
         
-        dialogue_history = curriculum.dialogue_history or []
+        # Refresh to ensure we have the latest mastery_scores from database
+        db.refresh(curriculum)
         
-        # Initialize score tracking
-        tracks = ["Care-giving", "Academic", "Food/Tech"]
+        # Get mastery_scores from JSON field
+        mastery_scores = curriculum.mastery_scores
+        
+        # Handle different data types (dict, string, None)
+        if mastery_scores is None:
+            mastery_scores = {}
+        elif isinstance(mastery_scores, str):
+            try:
+                mastery_scores = json.loads(mastery_scores)
+            except json.JSONDecodeError:
+                mastery_scores = {}
+        elif not isinstance(mastery_scores, dict):
+            mastery_scores = {}
+        
+        # Initialize default structure
+        tracks = ["Food/Tech", "Academic", "Care-giving"]
         skills = ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]
         
-        # Track scores: {track: {skill: [scores]}}
-        track_scores = {
-            track: {skill: [] for skill in skills}
-            for track in tracks
-        }
-        
-        # Process each dialogue entry
-        for entry in dialogue_history:
-            # Get track from session_snapshot or entry
-            track = None
-            if "session_snapshot" in entry:
-                track = entry["session_snapshot"].get("track")
-            elif "track" in entry:
-                track = entry.get("track")
-            
-            if not track or track not in tracks:
-                continue
-            
-            # Get evaluation if available
-            evaluation = entry.get("evaluation")
-            if not evaluation:
-                continue
-            
-            status = evaluation.get("status", "")
-            feedback = evaluation.get("feedback", "").lower()
-            explanation = evaluation.get("explanation", "").lower()
-            
-            # Get affected skills from evaluation (preferred method)
-            affected_skills = evaluation.get("affected_skills", [])
-            
-            # Fallback to keyword detection if affected_skills not available
-            if not affected_skills:
-                # Vocabulary issues
-                vocab_keywords = ["vocabulary", "terminology", "word", "term", "incorrect terminology"]
-                vocab_issue = any(keyword in feedback or keyword in explanation for keyword in vocab_keywords)
-                
-                # Tone/Honorifics issues
-                tone_keywords = ["tone", "honorific", "desu", "masu", "plain form", "keigo", "polite", "formal"]
-                tone_issue = any(keyword in feedback or keyword in explanation for keyword in tone_keywords)
-                
-                # Contextual Logic issues
-                logic_keywords = ["meaning", "context", "logic", "contextual", "understand", "comprehension"]
-                logic_issue = any(keyword in feedback or keyword in explanation for keyword in logic_keywords)
-                
-                if vocab_issue:
-                    affected_skills.append("Vocabulary")
-                if tone_issue:
-                    affected_skills.append("Tone/Honorifics")
-                if logic_issue:
-                    affected_skills.append("Contextual Logic")
-                
-                # If no specific issue identified, apply to all skills
-                if not affected_skills:
-                    affected_skills = ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]
-            
-            # Calculate score based on status
-            if status == "Acceptable":
-                score = 100.0
-            elif status == "Partially Acceptable":
-                score = 50.0  # Partial credit
-            elif status == "Non-Acceptable":
-                score = 0.0
-            else:
-                score = 50.0  # Default for unknown status
-            
-            # Apply scores to affected skills
-            # If Partially Acceptable or Non-Acceptable, lower the affected skill scores
-            if status in ["Partially Acceptable", "Non-Acceptable"]:
-                for skill in affected_skills:
-                    if skill in track_scores[track]:
-                        track_scores[track][skill].append(score)
-            else:
-                # Acceptable responses boost all skills
-                track_scores[track]["Vocabulary"].append(score)
-                track_scores[track]["Tone/Honorifics"].append(score)
-                track_scores[track]["Contextual Logic"].append(score)
-        
-        # Calculate average scores for each track and skill
-        mastery_scores = {}
+        # Ensure all tracks and skills exist with default values
+        result = {}
         for track in tracks:
-            mastery_scores[track] = {}
+            result[track] = {}
+            track_data = mastery_scores.get(track, {})
             for skill in skills:
-                scores = track_scores[track][skill]
-                if scores:
-                    avg_score = sum(scores) / len(scores)
-                    mastery_scores[track][skill] = round(avg_score, 1)
-                else:
-                    mastery_scores[track][skill] = 0.0
+                result[track][skill] = float(track_data.get(skill, 0.0))
         
-        return mastery_scores
+        return result
         
     except Exception as e:
-        logger.error(f"Error calculating mastery scores: {e}")
+        logger.error(f"Error getting mastery scores from CurriculumProgress: {e}")
         # Return default scores on error
-        tracks = ["Care-giving", "Academic", "Food/Tech"]
+        tracks = ["Food/Tech", "Academic", "Care-giving"]
         skills = ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]
         return {
             track: {skill: 0.0 for skill in skills}
@@ -1982,20 +1918,25 @@ def show_video_hub():
     if "video_hub_current_topic" not in st.session_state:
         st.session_state.video_hub_current_topic = None
     
-    # Track Selection
+    # Track Selection - Food/Tech is default per Gemini.md standards
     st.subheader("📚 Select Your Track")
     track_options = {
-        "Care-giving": "🏥 Care-giving (Kaigo Training)",
+        "Food/Tech": "🍜 Food/Tech (Commercial Centers)",
         "Academic": "📖 Academic Preparation",
-        "Food/Tech": "🍜 Food/Tech (Commercial Centers)"
+        "Care-giving": "🏥 Care-giving (Kaigo Training)"
     }
+    
+    # Default to Food/Tech if not set
+    if "video_hub_track" not in st.session_state or st.session_state.video_hub_track not in track_options:
+        st.session_state.video_hub_track = "Food/Tech"
     
     selected_track = st.radio(
         "Choose your coaching track:",
         options=list(track_options.keys()),
         format_func=lambda x: track_options[x],
         key="video_hub_track_radio",
-        horizontal=True
+        horizontal=True,
+        index=list(track_options.keys()).index(st.session_state.video_hub_track) if st.session_state.video_hub_track in track_options else 0
     )
     st.session_state.video_hub_track = selected_track
     
@@ -2175,6 +2116,47 @@ def show_video_hub():
                     unsafe_allow_html=True
                 )
                 
+                # Immersion-Bridge: Load and display bilingual transcripts
+                video_filename = selected_lesson.get('video_filename') or Path(video_path).name
+                english_transcript, nepali_transcript = load_transcript_and_translate(video_filename, video_path)
+                
+                if english_transcript:
+                    with st.expander("📝 Lesson Transcript & Translation", expanded=True):
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown("**🇺🇸 English Transcript:**")
+                            st.text_area(
+                                "English",
+                                english_transcript,
+                                height=200,
+                                key=f"transcript_en_{selected_lesson.get('id')}",
+                                label_visibility="collapsed"
+                            )
+                        
+                        with col2:
+                            if nepali_transcript:
+                                st.markdown("**🇳🇵 Nepali Translation (नेपाली):**")
+                                st.text_area(
+                                    "Nepali",
+                                    nepali_transcript,
+                                    height=200,
+                                    key=f"transcript_ne_{selected_lesson.get('id')}",
+                                    label_visibility="collapsed"
+                                )
+                            else:
+                                st.info("Translation in progress...")
+                        
+                        # Mark transcript as displayed for Socratic trigger
+                        transcript_key = f"transcript_displayed_{selected_lesson.get('id')}"
+                        if transcript_key not in st.session_state:
+                            st.session_state[transcript_key] = True
+                            # For Food/Tech track, auto-trigger Socratic questions after transcript display
+                            if selected_track == "Food/Tech":
+                                # Set flag to trigger Socratic assessment
+                                if "video_hub_auto_trigger_socratic" not in st.session_state:
+                                    st.session_state.video_hub_auto_trigger_socratic = True
+                
                 # Note: Full timestamp capture requires a custom Streamlit component
                 # The JavaScript above stores the timestamp in window.videoCurrentTime
                 # For production, consider using streamlit-component-template to create
@@ -2227,6 +2209,19 @@ def show_video_hub():
                     <p style="color: white;">Video content unavailable. Socratic assessment is still available below.</p>
                 </div>
                 """, unsafe_allow_html=True)
+        
+        # Auto-trigger Socratic for Food/Tech track after transcript display
+        if selected_track == "Food/Tech" and st.session_state.get("video_hub_auto_trigger_socratic", False):
+            # Auto-trigger Socratic assessment for Food/Tech track
+            if not st.session_state.get("video_hub_practice_triggered", False):
+                st.session_state.video_hub_practice_triggered = True
+                st.session_state.video_hub_practice_topic = selected_lesson.get('topic', 'food_safety')
+                st.session_state.video_hub_practice_track = selected_track
+                st.session_state.video_hub_practice_timestamp = 0.0
+                st.session_state.video_hub_feedback_acknowledged = False
+                st.session_state.video_hub_can_resume = False
+                st.session_state.video_hub_auto_trigger_socratic = False  # Reset flag
+                st.rerun()
         
         # Practice Now button - ALWAYS VISIBLE (not conditional on video)
         st.markdown("---")
@@ -2330,7 +2325,8 @@ def show_video_hub():
                                         topic=topic,
                                         video_timestamp=timestamp,
                                         candidate_response=candidate_response.strip(),
-                                        start_new_session=False
+                                        start_new_session=False,
+                                        language=st.session_state.get('video_hub_language', 'en')
                                     )
                                     
                                     result = assessment_tool.run()
@@ -2428,7 +2424,8 @@ def show_video_hub():
                             track=track,
                             topic=topic,
                             video_timestamp=timestamp,
-                            start_new_session=True
+                            start_new_session=True,
+                            language=st.session_state.get('video_hub_language', 'en')
                         )
                         
                         result = assessment_tool.run()
@@ -2449,6 +2446,64 @@ def show_video_hub():
                     if config.DEBUG:
                         with st.expander("Debug Info"):
                             st.code(traceback.format_exc())
+
+
+def load_transcript_and_translate(video_filename: str, video_path: str) -> tuple[str | None, str | None]:
+    """
+    Load English transcript file and generate Nepali translation using Gemini.
+    
+    Returns: (english_transcript, nepali_transcript) or (None, None) if not found
+    """
+    try:
+        # Extract base filename (without extension)
+        base_name = Path(video_filename).stem
+        
+        # Determine transcript path based on video path location
+        if "static/videos" in str(video_path):
+            # New Immersion-Bridge structure: static/videos/[track]/[file]
+            video_dir = Path(__file__).parent.parent / Path(video_path).parent
+        else:
+            # Old structure fallback: assets/videos/[track]/[file]
+            video_dir = Path(__file__).parent.parent / Path(video_path).parent
+        
+        transcript_path = video_dir / f"{base_name}_En.txt"
+        
+        if not transcript_path.exists():
+            return None, None
+        
+        # Read English transcript
+        english_transcript = transcript_path.read_text(encoding='utf-8').strip()
+        
+        if not english_transcript:
+            return None, None
+        
+        # Generate Nepali translation using Gemini
+        nepali_transcript = None
+        try:
+            from google import genai
+            if config.GEMINI_API_KEY:
+                client = genai.Client(api_key=config.GEMINI_API_KEY)
+                prompt = f"""Translate the following English text to Nepali (नेपाली). 
+Keep technical terms and proper nouns in their original form if commonly used.
+Return only the translation, no explanations.
+
+English text:
+{english_transcript}"""
+                
+                response = client.models.generate_content(
+                    model='gemini-2.0-flash',
+                    contents=prompt
+                )
+                nepali_transcript = response.text.strip()
+        except Exception as e:
+            logger.warning(f"Error translating transcript to Nepali: {e}")
+            nepali_transcript = None
+        
+        return english_transcript, nepali_transcript
+        
+    except Exception as e:
+        logger.warning(f"Error loading transcript: {e}")
+        return None, None
 
 
 def load_video_lessons(track: str, language: str) -> list[dict]:
@@ -2489,16 +2544,36 @@ def load_video_lessons(track: str, language: str) -> list[dict]:
     
     # Fallback to file system if no database lessons found
     if not lessons:
-        video_dir = Path(__file__).parent.parent / "assets" / "videos" / track.lower().replace("-", "_")
+        # Try new Immersion-Bridge directory structure first: static/videos/[track]/
+        track_dir_map = {
+            "Food/Tech": "food_tech",
+            "Academic": "academic",
+            "Care-giving": "care_giving",
+            "Tech/AI": "tech_ai"
+        }
+        track_dir = track_dir_map.get(track, track.lower().replace("-", "_"))
+        
+        # Try static/videos/[track]/ first (Immersion-Bridge standard)
+        video_dir = Path(__file__).parent.parent / "static" / "videos" / track_dir
+        if not video_dir.exists():
+            # Fallback to old assets/videos/ structure
+            video_dir = Path(__file__).parent.parent / "assets" / "videos" / track.lower().replace("-", "_")
+        
         if video_dir.exists():
             video_files = list(video_dir.glob("*.mp4")) + list(video_dir.glob("*.webm")) + list(video_dir.glob("*.ogg"))
             for idx, video_file in enumerate(sorted(video_files), 1):
+                # Determine video path based on which directory was found
+                if "static/videos" in str(video_dir):
+                    video_path = f"static/videos/{track_dir}/{video_file.name}"
+                else:
+                    video_path = f"assets/videos/{track.lower().replace('-', '_')}/{video_file.name}"
+                
                 lessons.append({
                     'id': f"file_{idx}",
                     'lesson_title': video_file.stem.replace("_", " ").title(),
                     'lesson_description': f"Video lesson from {track} track",
                     'lesson_number': idx,
-                    'video_path': f"assets/videos/{track.lower().replace('-', '_')}/{video_file.name}",
+                    'video_path': video_path,
                     'video_filename': video_file.name,
                     'topic': 'knowledge_base',  # Default topic
                     'duration_minutes': None,

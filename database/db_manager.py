@@ -132,6 +132,11 @@ class CurriculumProgress(Base):
     # Stores initial 5-question assessment results: {"assessment_date": "...", "overall_score": ..., "questions": [...]}
     baseline_assessment_results = Column(JSON, nullable=True)
 
+    # Mastery Scores (JSON)
+    # Stores mastery scores (0-100) per track and skill category
+    # Format: {"Food/Tech": {"Vocabulary": 75.0, "Tone/Honorifics": 60.0, "Contextual Logic": 80.0}, ...}
+    mastery_scores = Column(JSON, nullable=True)
+
     # Timestamps
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
