@@ -964,6 +964,356 @@ def process_concierge_voice(audio_bytes: bytes, language: str) -> str:
         return f"Error processing voice: {error_details}. Please try again or type your message instead."
 
 
+def get_sensei_response(
+    user_input: str,
+    conversation_history: list,
+    transcript: str,
+    timer_elapsed: int,
+    track: str = "Food/Tech",
+    current_page: str = None
+) -> str:
+    """
+    Get response from Sensei using Socratic logic from sandbox_socratic_logic.py.
+    
+    Args:
+        user_input: User's message
+        conversation_history: List of previous messages with 'role' and 'content'
+        transcript: Video transcript text
+        timer_elapsed: Elapsed time in seconds (maps to video timestamp)
+        track: Training track (default: "Food/Tech")
+        current_page: Current page name (e.g., "📖 Academic Hub") to determine persona [cite: 2025-12-20]
+    
+    Returns:
+        Sensei's response as a string
+    """
+    try:
+        from google import genai
+        import config
+        
+        if not config.GEMINI_API_KEY:
+            return "Error: GEMINI_API_KEY not configured. Please set it in your .env file."
+        
+        client = genai.Client(api_key=config.GEMINI_API_KEY)
+        
+        # Determine conversation phase based on timer
+        if timer_elapsed < 180:
+            phase = "helpful_assistant"
+            phase_instruction = "You are in 'Helpful Assistant' mode. Guide the student with questions, but be supportive and encouraging."
+        else:
+            phase = "evaluator"
+            phase_instruction = "You are now in 'Evaluator' mode. Assess the student's understanding more critically. Ask deeper questions to test their knowledge."
+        
+        # Build conversation history context
+        history_text = ""
+        if conversation_history:
+            history_text = "\n\n**Previous Conversation:**\n"
+            for msg in conversation_history[-5:]:  # Last 5 messages
+                role_label = "Sensei" if msg['role'] == 'sensei' else "Student"
+                history_text += f"- {role_label}: {msg['content']}\n"
+        
+        # Handle special initial greeting prompt (from show_academic_hub) [cite: 2025-12-20]
+        # Simplified Trilingual Prompt: Direct and simple [cite: 2025-12-20]
+        if user_input and (user_input.strip().startswith("The student has just started the lesson") or user_input.strip().startswith("Greeting:")):
+            # This is a special prompt for initial greeting - use simplified format
+            prompt = user_input  # Use the simplified prompt as-is
+        # Handle initial greeting when user_input is empty [cite: 2025-12-20]
+        elif not user_input or user_input.strip() == "":
+            # Initial greeting for Academic Hub
+            if current_page == "📖 Academic Hub" or current_page == "Academic Hub":
+                prompt = f"""You are a Socratic Japanese Language Teacher. Your goal is to guide the student to understand grammar, particles, and kanji.
+
+**System Context - Lesson Transcript:**
+{transcript}
+
+**Language Instructions:**
+Based on the transcript context above, you should be prepared to speak in English, Japanese (Kanji/Kana), and Nepali (Devanagari) as needed. The transcript provides the lesson context that informs your responses.
+
+**Initial Greeting:**
+The student has just started this lesson. Provide a warm, encouraging greeting in English that:
+1. Welcomes them to the JLPT lesson
+2. Mentions the key topic from the transcript (if available)
+3. Invites them to ask questions or share what they'd like to learn
+4. Sets a supportive, Socratic tone
+
+Keep it brief (2-3 sentences) and friendly.
+
+**Your Response (as JLPT Sensei, in English, welcoming greeting):**
+"""
+            else:
+                # Initial greeting for Food/Tech track
+                prompt = f"""You are a Japanese Food Safety Sensei (Teacher) conducting a Socratic dialogue about HACCP and kitchen sanitization.
+
+**System Context - Lesson Transcript:**
+{transcript}
+
+**Language Instructions:**
+Based on the transcript context above, you should be prepared to speak in English, Japanese (Kanji/Kana), and Nepali (Devanagari) as needed. The transcript provides the lesson context that informs your responses.
+
+**Initial Greeting:**
+The student has just started this lesson. Provide a warm, encouraging greeting in English that:
+1. Welcomes them to the Food Safety training
+2. Mentions the key topic from the transcript (if available)
+3. Invites them to ask questions or share what they'd like to learn
+4. Sets a supportive, Socratic tone
+
+Keep it brief (2-3 sentences) and friendly.
+
+**Your Response (as Food Safety Sensei, in English, welcoming greeting):**
+"""
+        # Persona Pivot: Check if current page is Academic Hub [cite: 2025-12-20]
+        elif current_page == "📖 Academic Hub" or current_page == "Academic Hub":
+            # JLPT Sensei persona for Academic Hub [cite: 2025-12-20]
+            # Transcript-to-Sensei: Ensure transcript is used as system prompt context [cite: 2025-12-20]
+            prompt = f"""You are a Socratic Japanese Language Teacher. Your goal is to guide the student to understand grammar, particles, and kanji. Use the transcript provided. If they make a mistake with a particle (like wa vs ga), ask them to explain the function of the particle instead of correcting them immediately.
+
+**System Context - Lesson Transcript:**
+{transcript}
+
+**Language Instructions:**
+Based on the transcript context above, you should be prepared to speak in English, Japanese (Kanji/Kana), and Nepali (Devanagari) as needed. The transcript provides the lesson context that informs your responses.
+
+**Your Role:**
+- You are a Socratic teacher. You DO NOT give direct answers.
+- You ask guiding questions that help the student discover the answers themselves.
+- You focus on Japanese grammar, particles (wa, ga, ni, wo, de, etc.), kanji, and JLPT concepts.
+
+**Language Detection:**
+- Detect the language the student is using (English, Japanese, or Nepali).
+- Respond in the SAME language the student uses.
+- If the student mixes languages, respond in the primary language they're using.
+
+**Current Phase: {phase.upper()}**
+{phase_instruction}
+
+**Key Topics to Explore:**
+1. Particle usage: wa (は), ga (が), ni (に), wo (を), de (で), etc.
+2. Kanji recognition and meaning
+3. Grammar patterns (N5, N4, N3 level)
+4. Sentence structure and word order
+5. Verb conjugations and forms
+
+**Socratic Method Rules:**
+- NEVER give the answer directly. Instead, ask: "What do you think the particle 'wa' does in this sentence?"
+- If the student is stuck, ask a simpler related question to guide them.
+- If the student gives a partial answer, ask a follow-up to deepen understanding.
+- Praise correct thinking, but challenge assumptions gently.
+- Focus on helping them understand the WHY behind grammar rules, not just memorization.
+
+**Example Questions You Might Ask:**
+- "In the sentence '私は学生です', what role does the particle 'wa' play? Why is it used here instead of 'ga'?"
+- "Can you explain the difference between 'ni' and 'de' when talking about location?"
+- "What does this kanji mean? Can you break it down into its components?"
+
+{history_text}
+
+**Student's Latest Input:**
+User input: {user_input!r}
+
+**Your Response (as JLPT Sensei, in the student's language, using Socratic questioning):**
+"""
+        else:
+            # Food/Tech Sensei persona (default)
+            prompt = f"""You are a Japanese Food Safety Sensei (Teacher) conducting a Socratic dialogue about HACCP (Hazard Analysis and Critical Control Points) and kitchen sanitization.
+
+**System Context - Lesson Transcript:**
+{transcript}
+
+**Language Instructions:**
+Based on the transcript context above, you should be prepared to speak in English, Japanese (Kanji/Kana), and Nepali (Devanagari) as needed. The transcript provides the lesson context that informs your responses.
+
+**Your Role:**
+- You are a Socratic teacher. You DO NOT give direct answers.
+- You ask guiding questions that help the student discover the answers themselves.
+- You focus on HACCP principles and the 3-step sanitization process:
+  * Seiso (清掃) - Cleaning: Removing visible dirt and debris
+  * Sakkin (殺菌) - Disinfection: Killing harmful microorganisms
+  * Kansou (乾燥) - Air-drying: Allowing surfaces to air-dry naturally (no towels)
+
+**Language Detection:**
+- Detect the language the student is using (English, Japanese, or Nepali).
+- Respond in the SAME language the student uses.
+- If the student mixes languages, respond in the primary language they're using.
+
+**Current Phase: {phase.upper()}**
+{phase_instruction}
+
+**Key Topics to Explore:**
+1. Temperature control: Cold storage (<10°C), Frozen storage (<-15°C)
+2. 3-step sanitization: Why each step matters, what happens if you skip a step
+3. Cross-contamination (Kousa-osen / 交差汚染)
+4. Expiry management (Kigen-kanri / 期限管理)
+5. Proper disinfection techniques (Shudoku / 消毒)
+
+**Socratic Method Rules:**
+- NEVER give the answer directly. Instead, ask: "What do you think would happen if...?"
+- If the student is stuck, ask a simpler related question to guide them.
+- If the student gives a partial answer, ask a follow-up to deepen understanding.
+- Praise correct thinking, but challenge assumptions gently.
+- If the student uses HACCP terminology (like Kousa-osen, Kigen-kanri, Shudoku), acknowledge it positively.
+
+**Example Questions You Might Ask:**
+- "The temperature log shows the walk-in freezer at -10°C. What does HACCP require for frozen storage?"
+- "You're cleaning a prep table. Can you explain the difference between Seiso and Sakkin? Why is air-drying (Kansou) better than using a towel?"
+- "What could happen if you skip the Kansou step and wipe the surface with a towel instead?"
+
+{history_text}
+
+**Student's Latest Input:**
+User input: {user_input!r}
+
+**Your Response (as Sensei, in the student's language, using Socratic questioning):**
+"""
+        
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
+        
+        return response.text.strip()
+        
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting Sensei response: {e}")
+        return f"I encountered an error: {str(e)}. Please try again."
+
+
+def check_vocabulary_bonus_terms(user_input: str, track: str = "Food/Tech") -> list[str]:
+    """
+    Check if user input contains vocabulary bonus terms.
+    
+    Returns list of found terms.
+    """
+    if track != "Food/Tech":
+        return []
+    
+    # Vocabulary bonus terms for Food/Tech track
+    bonus_terms = [
+        "Kousa-osen",
+        "Kousa-osen",
+        "Kigen-kanri",
+        "Kigen-kanri",
+        "Shudoku",
+        "Shudoku",
+        "交差汚染",  # Japanese for cross-contamination
+        "期限管理",  # Japanese for expiry management
+        "消毒"       # Japanese for disinfection
+    ]
+    
+    found_terms = []
+    user_lower = user_input.lower()
+    
+    for term in bonus_terms:
+        if term.lower() in user_lower or term in user_input:
+            found_terms.append(term)
+    
+    return found_terms
+
+
+def transcribe_audio_with_gemini(audio_bytes: bytes) -> str:
+    """
+    Transcribe audio using Gemini 2.0 Flash with trilingual support.
+    
+    Args:
+        audio_bytes: Audio data as bytes (WAV format from mic_recorder)
+    
+    Returns:
+        Transcribed text string
+    """
+    try:
+        import google.generativeai as genai
+        import config
+        
+        # Get API key
+        api_key = config.GEMINI_API_KEY if config and hasattr(config, 'GEMINI_API_KEY') else os.getenv("GEMINI_API_KEY")
+        
+        if not api_key:
+            return "Error: GEMINI_API_KEY not found. Set it in .env file."
+        
+        # Configure Gemini
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.0-flash')
+        
+        # Prepare audio data
+        audio_data = {
+            "mime_type": "audio/wav",
+            "data": audio_bytes
+        }
+        
+        # Trilingual transcription prompt
+        prompt = "Please transcribe this audio accurately. If it is in Japanese, provide the Kanji/Kana. If English or Nepali, transcribe accordingly. Output ONLY the transcript."
+        
+        # Generate transcription
+        response = model.generate_content([prompt, audio_data])
+        
+        return response.text.strip()
+        
+    except Exception as e:
+        import traceback
+        logger.error(f"Error transcribing audio with Gemini: {e}")
+        if config.DEBUG:
+            logger.error(traceback.format_exc())
+        return f"Error transcribing audio: {str(e)}"
+
+
+def update_mastery_score_for_vocabulary(candidate_id: str, track: str, found_terms: list[str]):
+    """
+    Update mastery score for Vocabulary skill when bonus terms are used.
+    Increments by 2 points per term found (capped at 100).
+    """
+    if not found_terms:
+        return
+    
+    try:
+        from database.db_manager import CurriculumProgress, SessionLocal
+        import json
+        
+        db = SessionLocal()
+        try:
+            curriculum = db.query(CurriculumProgress).filter(
+                CurriculumProgress.candidate_id == candidate_id
+            ).first()
+            
+            if not curriculum:
+                return
+            
+            # Get or initialize mastery_scores
+            mastery_scores = curriculum.mastery_scores
+            if mastery_scores is None:
+                mastery_scores = {}
+            elif isinstance(mastery_scores, str):
+                try:
+                    mastery_scores = json.loads(mastery_scores)
+                except json.JSONDecodeError:
+                    mastery_scores = {}
+            elif not isinstance(mastery_scores, dict):
+                mastery_scores = {}
+            
+            # Initialize track if needed
+            if track not in mastery_scores:
+                mastery_scores[track] = {}
+            
+            # Increment Vocabulary score (2 points per term, max 100)
+            current_vocab_score = float(mastery_scores[track].get("Vocabulary", 0.0))
+            increment = min(2.0 * len(found_terms), 100.0 - current_vocab_score)
+            new_vocab_score = min(100.0, current_vocab_score + increment)
+            mastery_scores[track]["Vocabulary"] = round(new_vocab_score, 1)
+            
+            # Save to database
+            curriculum.mastery_scores = mastery_scores
+            db.add(curriculum)
+            db.commit()
+            db.refresh(curriculum)
+            
+        finally:
+            db.close()
+            
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Error updating mastery score for vocabulary: {e}")
+
+
 def get_concierge_response(user_input: str, language: str) -> str:
     """Get response from SupportAgent for concierge widget."""
     # Handle empty input
@@ -1298,7 +1648,7 @@ def main():
         except Exception:
             pass
     
-    page_options = ["Candidate View", "Wisdom Hub", "Video Hub", "Progress", "Live Simulator", "Financial Ledger", "Compliance", "Life-in-Japan Support", "Virtual Classroom"]
+    page_options = ["Candidate View", "Wisdom Hub", "Video Hub", "📖 Academic Hub", "Progress", "Live Simulator", "Financial Ledger", "Compliance", "Life-in-Japan Support", "Virtual Classroom"]
     if admin_mode:
         page_options.append("Admin Dashboard")
     
@@ -1306,6 +1656,16 @@ def main():
         "Select View",
         page_options,
     )
+    
+    # Store current page in session state for persona detection
+    st.session_state.page = page
+    st.session_state.current_page = page  # Also store as current_page for compatibility
+    
+    # Initialize Academic Hub session state variables [cite: 2025-12-21]
+    if 'academic_chat_history' not in st.session_state:
+        st.session_state.academic_chat_history = []
+    if 'academic_competency_response' not in st.session_state:
+        st.session_state.academic_competency_response = ""
     
     # Show Concierge Widget (after page selection to avoid conflicts)
     # Always show widget - it's a core feature
@@ -1330,6 +1690,8 @@ def main():
             show_wisdom_hub()
         elif page == "Video Hub":
             show_video_hub()
+        elif page == "📖 Academic Hub":
+            show_academic_hub()
         elif page == "Progress":
             show_progress_dashboard()
         elif page == "Live Simulator":
@@ -1545,11 +1907,12 @@ def show_wisdom_hub():
             st.markdown(report_content)
 
 
-def calculate_mastery_scores(candidate_id: str) -> dict:
+def calculate_mastery_scores(candidate_id: str) -> tuple[dict, datetime | None]:
     """
     Get mastery scores (0-100%) from CurriculumProgress.mastery_scores JSON field.
     
     Returns:
+        Tuple of (mastery_scores_dict, last_updated_timestamp)
         {
             "Food/Tech": {
                 "Vocabulary": 75.0,
@@ -1563,6 +1926,7 @@ def calculate_mastery_scores(candidate_id: str) -> dict:
     db = get_db_session()
     try:
         import json
+        from datetime import datetime, timezone
         
         # Get curriculum progress - refresh to ensure latest data
         curriculum = db.query(CurriculumProgress).filter(
@@ -1576,13 +1940,16 @@ def calculate_mastery_scores(candidate_id: str) -> dict:
             return {
                 track: {skill: 0.0 for skill in skills}
                 for track in tracks
-            }
+            }, None
         
         # Refresh to ensure we have the latest mastery_scores from database
         db.refresh(curriculum)
         
         # Get mastery_scores from JSON field
         mastery_scores = curriculum.mastery_scores
+        
+        # Get last updated timestamp
+        last_updated = curriculum.updated_at
         
         # Handle different data types (dict, string, None)
         if mastery_scores is None:
@@ -1607,7 +1974,7 @@ def calculate_mastery_scores(candidate_id: str) -> dict:
             for skill in skills:
                 result[track][skill] = float(track_data.get(skill, 0.0))
         
-        return result
+        return result, last_updated
         
     except Exception as e:
         logger.error(f"Error getting mastery scores from CurriculumProgress: {e}")
@@ -1617,7 +1984,7 @@ def calculate_mastery_scores(candidate_id: str) -> dict:
         return {
             track: {skill: 0.0 for skill in skills}
             for track in tracks
-        }
+        }, None
     finally:
         db.close()
 
@@ -1728,7 +2095,33 @@ def show_progress_dashboard():
     
     # Calculate mastery scores
     with st.spinner("Calculating mastery scores..."):
-        mastery_scores = calculate_mastery_scores(candidate_id)
+        mastery_scores, last_updated = calculate_mastery_scores(candidate_id)
+    
+    # Display Last Evaluated timestamp
+    if last_updated:
+        from datetime import datetime, timezone
+        # Convert to local time if needed, or display in UTC
+        if isinstance(last_updated, datetime):
+            # Format timestamp
+            formatted_time = last_updated.strftime("%Y-%m-%d %H:%M:%S UTC")
+            # Calculate time ago
+            now = datetime.now(timezone.utc)
+            if last_updated.tzinfo is None:
+                # If no timezone info, assume UTC
+                last_updated = last_updated.replace(tzinfo=timezone.utc)
+            time_diff = now - last_updated
+            if time_diff.days > 0:
+                time_ago = f"{time_diff.days} day{'s' if time_diff.days > 1 else ''} ago"
+            elif time_diff.seconds > 3600:
+                hours = time_diff.seconds // 3600
+                time_ago = f"{hours} hour{'s' if hours > 1 else ''} ago"
+            elif time_diff.seconds > 60:
+                minutes = time_diff.seconds // 60
+                time_ago = f"{minutes} minute{'s' if minutes > 1 else ''} ago"
+            else:
+                time_ago = "just now"
+            
+            st.caption(f"🕒 Last Evaluated: {formatted_time} ({time_ago})")
     
     # Display overview metrics
     st.subheader("📈 Overall Mastery Scores")
@@ -1751,6 +2144,12 @@ def show_progress_dashboard():
     # Create heatmap visualization
     st.subheader("🔥 Performance Heatmap")
     
+    # Verification: Show that we're pulling from mastery_scores JSON
+    if "Food/Tech" in mastery_scores and "Vocabulary" in mastery_scores["Food/Tech"]:
+        vocab_score = mastery_scores["Food/Tech"]["Vocabulary"]
+        if vocab_score > 0:
+            st.success(f"✅ Vocabulary score from Video Hub: {vocab_score:.1f}% (pulled from CurriculumProgress.mastery_scores JSON)")
+    
     if not PLOTLY_AVAILABLE:
         st.warning("Plotly is not available. Please install it with: pip install plotly")
         # Fallback: Show as table
@@ -1761,7 +2160,7 @@ def show_progress_dashboard():
         tracks = ["Care-giving", "Academic", "Food/Tech"]
         skills = ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]
         
-        # Create matrix
+        # Create matrix - pulling directly from mastery_scores JSON field
         z_data = []
         for track in tracks:
             row = [mastery_scores[track].get(skill, 0.0) for skill in skills]
@@ -1917,14 +2316,6 @@ def show_video_hub():
     """Display Video Hub with Triple-Track Coaching and Socratic assessment."""
     st.header("🎥 Video & Audio Hub - Triple-Track Coaching")
 
-    # --- Sidebar Controls ---
-    with st.sidebar:
-        st.header("Interactive Controls")
-        interactive_mode = st.toggle('Interactive Mode', key='interactive_mode_toggle', value=False, help="Enable real-time Socratic assessment and feedback.")
-        selected_language = st.radio('Language', ['En', 'Ne', 'Ja'], key='video_language_radio', horizontal=True)
-
-    # --- Main Video Hub UI ---
-
     # Get candidate ID from session state (must be set elsewhere, e.g., on login)
     if 'selected_candidate_id' not in st.session_state:
         st.error("No candidate selected. Please select a candidate from the 'Candidate View'.")
@@ -1958,8 +2349,251 @@ def show_video_hub():
 
     st.markdown("---")
 
-    # Load lessons (assuming a function `load_video_lessons` exists)
+    # --- Sidebar Controls ---
+    with st.sidebar:
+        st.header("Interactive Controls")
+        interactive_mode = st.toggle('Interactive Mode', key='interactive_mode_toggle', value=False, help="Enable real-time Socratic assessment and feedback.")
+        selected_language = st.radio('Language', ['En', 'Ne', 'Ja'], key='video_language_radio', horizontal=True)
+        
+        # --- Sensei Concierge Sidebar Container ---
+        st.markdown("---")
+        st.subheader("🎓 Sensei Concierge")
+        
+        # Initialize chat history in session state if not exists
+        if 'chat_history' not in st.session_state:
+            st.session_state.chat_history = []
+        
+        # Toggle to activate/deactivate Sensei chat
+        sensei_chat_active = st.toggle(
+            'Chat with Sensei',
+            key='sensei_chat_active',
+            value=False,
+            help="Enable chat interface to interact with the Sensei during video playback."
+        )
+        
+        # Input Method Toggle (Text or Audio)
+        if sensei_chat_active:
+            input_method = st.radio(
+                "Input Method:",
+                options=["text", "audio"],
+                format_func=lambda x: "⌨️ Text" if x == "text" else "🎤 Audio",
+                key="sensei_input_method",
+                horizontal=True,
+                help="Choose how to interact with Sensei: Text input or Audio recording"
+            )
+        else:
+            input_method = "text"  # Default to text
+        
+        # Display chat interface if active
+        if sensei_chat_active:
+            st.markdown("**Chat with your Sensei:**")
+            
+            # Initialize video timestamp tracking
+            if 'video_start_time' not in st.session_state:
+                st.session_state.video_start_time = time.time()
+            
+            # Calculate timer_elapsed (maps to video timestamp)
+            timer_elapsed = int(time.time() - st.session_state.video_start_time)
+            
+            # Load transcript from selected video
+            transcript = ""
+            if lessons and 'video_hub_lesson_select' in st.session_state and st.session_state.video_hub_lesson_select is not None:
+                selected_lesson_idx = st.session_state.video_hub_lesson_select
+                if selected_lesson_idx is not None and selected_lesson_idx < len(lessons):
+                    selected_lesson = lessons[selected_lesson_idx]
+                    video_path_str = selected_lesson.get("video_path")
+                    video_path = Path(project_root) / video_path_str if video_path_str else None
+                    
+                    # Try alternative paths if needed
+                    if video_path and not video_path.exists() and selected_lesson.get("module_name") == "Food/Tech":
+                        video_filename = selected_lesson.get("video_filename", video_path.name)
+                        alt_path = Path(project_root) / "static" / "videos" / "food_tech" / video_filename
+                        if alt_path.exists():
+                            video_path = alt_path
+                        else:
+                            alt_path2 = Path(project_root) / "assets" / "videos" / "food_tech" / video_filename
+                            if alt_path2.exists():
+                                video_path = alt_path2
+                    
+                    # Load transcript
+                    if video_path and video_path.exists():
+                        transcript_path = video_path.with_name(f"{video_path.stem}_En.txt")
+                        if transcript_path.exists():
+                            try:
+                                transcript = transcript_path.read_text(encoding='utf-8').strip()
+                            except Exception as e:
+                                transcript = "Transcript file found but could not be read."
+                        else:
+                            transcript = "No transcript found for this video. Using default HACCP context."
+                    else:
+                        transcript = "Video not found. Using default HACCP context."
+                else:
+                    transcript = "Please select a lesson first. Using default HACCP context."
+            else:
+                transcript = "Please select a lesson first. Using default HACCP context."
+            
+            # Display chat history
+            if st.session_state.chat_history:
+                for message in st.session_state.chat_history:
+                    if message['role'] == 'sensei':
+                        with st.chat_message("assistant"):
+                            st.write(message['content'])
+                    elif message['role'] == 'user':
+                        with st.chat_message("user"):
+                            st.write(message['content'])
+            
+            # Initialize audio processing state
+            if 'last_audio_hash' not in st.session_state:
+                st.session_state.last_audio_hash = None
+            if 'is_final_competency_mode' not in st.session_state:
+                st.session_state.is_final_competency_mode = False
+            
+            # Chat input for user messages (Text mode)
+            if input_method == "text":
+                user_message = st.chat_input("Type your message to Sensei...")
+            else:
+                # Audio mode - mic_recorder
+                user_message = None
+                try:
+                    from streamlit_mic_recorder import mic_recorder
+                    
+                    st.markdown("**🎤 Voice Input:**")
+                    audio = mic_recorder(
+                        start_prompt="🎤 Start Recording",
+                        stop_prompt="🛑 Stop & Transcribe",
+                        key="sensei_audio_recorder_sidebar",
+                        use_container_width=True
+                    )
+                    
+                    # Process audio when recording stops
+                    if audio and isinstance(audio, dict) and 'bytes' in audio:
+                        # Check if this is new audio (not already processed)
+                        import hashlib
+                        audio_hash = hashlib.md5(audio['bytes']).hexdigest()
+                        
+                        if audio_hash != st.session_state.last_audio_hash:
+                            st.session_state.last_audio_hash = audio_hash
+                            
+                            # Show spinner during transcription
+                            with st.spinner("🎤 Sensei is transcribing your voice..."):
+                                # Transcribe audio
+                                transcribed_text = transcribe_audio_with_gemini(audio['bytes'])
+                                
+                                if transcribed_text and not transcribed_text.startswith("Error"):
+                                    # Check if we're in Final Competency mode
+                                    if st.session_state.is_final_competency_mode:
+                                        # Append to final competency response
+                                        current_response = st.session_state.get('final_competency_response', '')
+                                        st.session_state.final_competency_response = current_response + " " + transcribed_text if current_response else transcribed_text
+                                        st.success(f"✅ Voice transcribed and added to Final Competency Statement: {transcribed_text}")
+                                    else:
+                                        # Append to chat history and trigger Sensei response
+                                        st.session_state.chat_history.append({
+                                            'role': 'user',
+                                            'content': transcribed_text
+                                        })
+                                        
+                                        # Check for vocabulary bonus terms
+                                        found_terms = check_vocabulary_bonus_terms(transcribed_text, selected_track)
+                                        if found_terms:
+                                            update_mastery_score_for_vocabulary(candidate_id, selected_track, found_terms)
+                                            st.toast(f"🎯 Bonus vocabulary detected: {', '.join(set(found_terms))}")
+                                        
+                                        # Get Sensei response immediately
+                                        # Pass current page to determine persona
+                                        current_page = st.session_state.get('page', 'Video Hub')
+                                        sensei_response = get_sensei_response(
+                                            user_input=transcribed_text,
+                                            conversation_history=st.session_state.chat_history,
+                                            transcript=transcript,
+                                            timer_elapsed=timer_elapsed,
+                                            track=selected_track,
+                                            current_page=current_page
+                                        )
+                                        
+                                        st.session_state.chat_history.append({
+                                            'role': 'sensei',
+                                            'content': sensei_response
+                                        })
+                                        
+                                        st.success(f"✅ Voice transcribed: {transcribed_text}")
+                                    
+                                    # Rerun to update display
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Transcription failed: {transcribed_text}")
+                except ImportError:
+                    st.warning("⚠️ streamlit-mic-recorder not installed. Install with: pip install streamlit-mic-recorder")
+                    st.info("💡 Please use text input mode instead.")
+                except Exception as e:
+                    st.error(f"❌ Audio recording error: {str(e)}")
+            
+            if user_message:
+                # Add user message to chat history
+                st.session_state.chat_history.append({
+                    'role': 'user',
+                    'content': user_message
+                })
+                
+                # Check for vocabulary bonus terms and update mastery scores
+                found_terms = check_vocabulary_bonus_terms(user_message, selected_track)
+                if found_terms:
+                    update_mastery_score_for_vocabulary(candidate_id, selected_track, found_terms)
+                    # Show toast notification
+                    st.toast(f"🎯 Bonus vocabulary detected: {', '.join(set(found_terms))}")
+                
+                # Get Sensei response using Socratic logic
+                # Pass current page to determine persona
+                current_page = st.session_state.get('page', 'Video Hub')
+                sensei_response = get_sensei_response(
+                    user_input=user_message,
+                    conversation_history=st.session_state.chat_history,
+                    transcript=transcript,
+                    timer_elapsed=timer_elapsed,
+                    track=selected_track,
+                    current_page=current_page
+                )
+                
+                st.session_state.chat_history.append({
+                    'role': 'sensei',
+                    'content': sensei_response
+                })
+                
+                # Rerun to update the chat display
+                st.rerun()
+            
+            # Display timer and phase indicator
+            phase_indicator = "Evaluator" if timer_elapsed >= 180 else "Helpful Assistant"
+            st.caption(f"⏱️ Timer: {timer_elapsed}s | Phase: {phase_indicator}")
+            
+            # Clear chat button
+            if st.button("Clear Chat History", key="clear_sensei_chat"):
+                st.session_state.chat_history = []
+                st.session_state.video_start_time = time.time()  # Reset timer
+                st.rerun()
+            
+            # Mastery Score Preview
+            st.markdown("---")
+            st.subheader("📊 Mastery Score Preview")
+            mastery_scores, _ = calculate_mastery_scores(candidate_id)
+            if selected_track in mastery_scores:
+                track_scores = mastery_scores[selected_track]
+                for skill, score in track_scores.items():
+                    st.metric(
+                        label=skill,
+                        value=f"{score:.1f}%",
+                        help=f"Current mastery level for {skill} in {selected_track} track"
+                    )
+            else:
+                st.info("No mastery scores yet. Start chatting with Sensei to earn points!")
+        else:
+            # Show message when chat is inactive
+            st.info("Toggle 'Chat with Sensei' to start a conversation during video playback.")
+    
+    # Load lessons after sidebar so selected_language is available
     lessons = load_video_lessons(selected_track, selected_language)
+
+    # --- Main Video Hub UI ---
 
     if not lessons:
         st.warning(f"No video lessons found for track '{selected_track}' in language '{selected_language}'.")
@@ -2063,6 +2697,121 @@ def show_video_hub():
                         st.error(f"Error loading or translating transcript: {e}")
             else:
                 st.info("No English transcript found for this video.")
+            
+            # --- Final Competency Submission Area ---
+            st.markdown("---")
+            with st.expander("📝 Final Competency Submission", expanded=False):
+                st.markdown("**Submit your final response for competency assessment (up to 3,000 words):**")
+                
+                # Toggle for Final Competency mode (affects audio transcription destination)
+                final_competency_mode = st.checkbox(
+                    "🎤 Use voice input for Final Competency Statement",
+                    key="final_competency_voice_mode",
+                    help="When enabled, voice recordings will be appended to this text area instead of the chat."
+                )
+                st.session_state.is_final_competency_mode = final_competency_mode
+                
+                # Initialize final response in session state
+                if 'final_competency_response' not in st.session_state:
+                    st.session_state.final_competency_response = ""
+                
+                # Text area with live word counter
+                final_response = st.text_area(
+                    "Your final competency response:",
+                    value=st.session_state.final_competency_response,
+                    key="final_response_text_area",
+                    height=300,
+                    help="Write your comprehensive response here. The word counter will update in real-time."
+                )
+                
+                # Live word counter
+                word_count = len(final_response.split()) if final_response else 0
+                max_words = 3000
+                word_count_color = "green" if word_count <= max_words else "red"
+                st.markdown(
+                    f"<p style='text-align: right; color: {word_count_color}; font-weight: bold;'>"
+                    f"Words: {word_count} / {max_words}</p>",
+                    unsafe_allow_html=True
+                )
+                
+                # Update session state
+                st.session_state.final_competency_response = final_response
+                
+                # Submit button
+                col_submit1, col_submit2, col_submit3 = st.columns([2, 1, 2])
+                with col_submit2:
+                    submit_clicked = st.button(
+                        "🚀 Submit to Sensei",
+                        key="submit_final_response",
+                        type="primary",
+                        use_container_width=True,
+                        disabled=word_count == 0 or word_count > max_words
+                    )
+                
+                if submit_clicked:
+                    if word_count == 0:
+                        st.error("Please enter a response before submitting.")
+                    elif word_count > max_words:
+                        st.error(f"Response exceeds {max_words} words. Please shorten your response.")
+                    else:
+                        # Show spinner and grade
+                        with st.spinner("Grading in Progress... Please wait while Sensei evaluates your response."):
+                            try:
+                                from agency.training_agent.competency_grading_tool import CompetencyGradingTool
+                                
+                                # Map language code
+                                lang_map = {"En": "en", "Ne": "ne", "Ja": "ja"}
+                                language_code = lang_map.get(selected_language, "en")
+                                
+                                # Call CompetencyGradingTool
+                                # Force Initialization: Tool initialization verified [cite: 2025-12-21]
+                                grading_tool = CompetencyGradingTool()
+                                
+                                grading_result = grading_tool.run(
+                                    response=final_response,
+                                    candidate_id=candidate_id,
+                                    track=selected_track,
+                                    language=language_code
+                                )
+                                
+                                # Display results
+                                st.success("✅ Assessment Complete! Your response has been graded.")
+                                
+                                # Show grading results
+                                if isinstance(grading_result, dict):
+                                    st.markdown("### 📊 Grading Results")
+                                    col_grade1, col_grade2 = st.columns(2)
+                                    with col_grade1:
+                                        st.metric("Overall Grade", f"{grading_result.get('grade', 'N/A')}/10")
+                                    with col_grade2:
+                                        st.info(f"**Accuracy:** {grading_result.get('accuracy_feedback', 'No feedback')}")
+                                    st.info(f"**Grammar:** {grading_result.get('grammar_feedback', 'No feedback')}")
+                                
+                                # Success toast
+                                st.toast("🎉 Your competency assessment has been submitted successfully!")
+                                
+                                # Link to Progress Dashboard
+                                st.markdown("---")
+                                st.markdown("### 📊 View Your Progress")
+                                st.info(
+                                    "Your scores have been updated. Click the button below to view your detailed progress report."
+                                )
+                                if st.button("📈 Go to Progress Dashboard", key="go_to_progress_dashboard"):
+                                    # Switch to Progress Dashboard page
+                                    st.session_state.page = "Progress Dashboard"
+                                    st.rerun()
+                                
+                                # Clear the response after successful submission
+                                st.session_state.final_competency_response = ""
+                                
+                            except ImportError:
+                                st.error("Competency grading tool is not available. Please ensure all dependencies are installed.")
+                            except Exception as e:
+                                st.error(f"An error occurred during grading: {str(e)}")
+                                import traceback
+                                if config.DEBUG:
+                                    with st.expander("Debug Info"):
+                                        st.code(traceback.format_exc())
 
         else:
             st.error(f"Video file not found for the selected lesson at path: {video_path}")
@@ -2109,12 +2858,16 @@ def show_video_hub():
                 # Assume dialogue_history is being populated by the chat component
                 if 'dialogue_history' in st.session_state:
                     from agency.training_agent.competency_grading_tool import CompetencyGradingTool
-                    grading_tool = CompetencyGradingTool(
+                    # Convert dialogue_history to a single response string
+                    dialogue_text = "\n".join([f"{msg.get('role', 'user')}: {msg.get('content', '')}" for msg in st.session_state.dialogue_history]) if st.session_state.dialogue_history else ""
+                    # Force Initialization: Tool initialization verified [cite: 2025-12-21]
+                    grading_tool = CompetencyGradingTool()
+                    grading_result = grading_tool.run(
+                        response=dialogue_text,
                         candidate_id=candidate_id,
-                        dialogue_history=st.session_state.dialogue_history,
-                        student_name=st.session_state.get('candidate_name', 'N/A') # Assuming name is in session
+                        track="Academic",  # Default track
+                        language="en"  # Default language
                     )
-                    grading_result = grading_tool.run()
                     st.success("Competency assessment complete! Your Progress Report has been updated.")
                     st.info(f"Grading Result: {grading_result}")
 
@@ -2249,39 +3002,669 @@ def load_video_lessons(track: str, language: str) -> list[dict]:
         }
         track_dir = track_dir_map.get(track, track.lower().replace("-", "_"))
         
-        # Try static/videos/[track]/ first (Immersion-Bridge standard)
-        video_dir = Path(__file__).parent.parent / "static" / "videos" / track_dir
-        found_in_static = True
-        if not video_dir.exists():
-            # Fallback to old assets/videos/ structure
-            # Use track_dir_map to ensure correct directory name (e.g., "food_tech" not "food/tech")
-            video_dir = Path(__file__).parent.parent / "assets" / "videos" / track_dir
+        # Special handling for Academic track: check subfolders n5, n4, n3 [cite: 2025-12-21]
+        if track == "Academic":
+            # Point to assets/videos/academic/ with lowercase subfolders [cite: 2025-12-21]
+            academic_base = Path(__file__).parent.parent / "assets" / "videos" / "academic"
             found_in_static = False
-        
-        if video_dir.exists():
-            video_files = list(video_dir.glob("*.mp4")) + list(video_dir.glob("*.webm")) + list(video_dir.glob("*.ogg"))
-            for idx, video_file in enumerate(sorted(video_files), 1):
-                # Determine video path based on which directory was found
-                if found_in_static:
-                    video_path = f"static/videos/{track_dir}/{video_file.name}"
-                else:
-                    video_path = f"assets/videos/{track_dir}/{video_file.name}"
+            
+            # Path Debug: Show search path in sidebar [cite: 2025-12-21]
+            target_path = str(academic_base)
+            st.sidebar.write(f'🔍 Searching path: {target_path}')
+            
+            # Check for n5, n4, n3 subfolders (case-insensitive) [cite: 2025-12-21]
+            jlpt_levels = ["n5", "n4", "n3"]
+            level_display_map = {"n5": "N5", "n4": "N4", "n3": "N3"}  # Map to display format
+            
+            # Get all subdirectories and match case-insensitively
+            if academic_base.exists():
+                actual_subdirs = [d.name for d in academic_base.iterdir() if d.is_dir()]
+                for level in jlpt_levels:
+                    # Case-insensitive matching [cite: 2025-12-21]
+                    matching_dir = None
+                    for actual_dir in actual_subdirs:
+                        if actual_dir.lower() == level.lower():
+                            matching_dir = actual_dir
+                            break
+                    
+                    if matching_dir:
+                        level_dir = academic_base / matching_dir
+                        # Path Debug: Show level directory path [cite: 2025-12-21]
+                        st.sidebar.write(f'🔍 Checking level dir: {level_dir}')
+                        
+                        # Try to find video files first
+                        video_files = list(level_dir.glob("*.mp4")) + list(level_dir.glob("*.webm")) + list(level_dir.glob("*.ogg"))
+                        
+                        # Fallback Logic: If no video files, use .txt files [cite: 2025-12-20]
+                        if not video_files:
+                            txt_files = list(level_dir.glob("*_En.txt")) + list(level_dir.glob("*.txt"))
+                            if txt_files:
+                                st.sidebar.write(f'⚠️ No video files found, using .txt files: {len(txt_files)} found')
+                                for idx, txt_file in enumerate(sorted(txt_files), 1):
+                                    # Extract base name (remove _En.txt or .txt)
+                                    base_name = txt_file.stem.replace("_En", "").replace("_en", "")
+                                    # Create a placeholder video path (will be handled gracefully by UI)
+                                    video_path = f"assets/videos/academic/{matching_dir}/{base_name}.mp4"
+                                    display_level = level_display_map.get(level, level.upper())
+                                    lessons.append({
+                                        'id': f"file_{level}_{idx}_txt",
+                                        'lesson_title': f"{display_level} - {base_name.replace('_', ' ').title()}",
+                                        'lesson_description': f"JLPT {display_level} lesson from Academic track (Transcript only)",
+                                        'lesson_number': idx,
+                                        'video_path': None,  # No video file
+                                        'video_filename': None,
+                                        'transcript_path': str(txt_file),  # Store transcript path
+                                        'topic': f'jlpt_{level}',
+                                        'duration_minutes': None,
+                                        'difficulty_level': display_level,
+                                        'module_name': f"Academic ({display_level})",
+                                        'source': 'filesystem_txt'
+                                    })
+                                continue  # Skip video file processing for this level
+                        
+                        # Process video files if found
+                        for idx, video_file in enumerate(sorted(video_files), 1):
+                            video_path = f"assets/videos/academic/{matching_dir}/{video_file.name}"
+                            display_level = level_display_map.get(level, level.upper())
+                            lessons.append({
+                                'id': f"file_{level}_{idx}",
+                                'lesson_title': f"{display_level} - {video_file.stem.replace('_', ' ').title()}",
+                                'lesson_description': f"JLPT {display_level} lesson from Academic track",
+                                'lesson_number': idx,
+                                'video_path': video_path,
+                                'video_filename': video_file.name,
+                                'topic': f'jlpt_{level}',
+                                'duration_minutes': None,
+                                'difficulty_level': display_level,
+                                'module_name': f"Academic ({display_level})",
+                                'source': 'filesystem'
+                            })
+        else:
+            # Try static/videos/[track]/ first (Immersion-Bridge standard)
+            video_dir = Path(__file__).parent.parent / "static" / "videos" / track_dir
+            found_in_static = True
+            
+            # Path Debug: Show search path in sidebar [cite: 2025-12-21]
+            target_path = str(video_dir)
+            st.sidebar.write(f'🔍 Searching path: {target_path}')
+            
+            if not video_dir.exists():
+                # Fallback to old assets/videos/ structure
+                # Use track_dir_map to ensure correct directory name (e.g., "food_tech" not "food/tech")
+                video_dir = Path(__file__).parent.parent / "assets" / "videos" / track_dir
+                found_in_static = False
+                # Path Debug: Show fallback path [cite: 2025-12-21]
+                target_path = str(video_dir)
+                st.sidebar.write(f'🔍 Fallback path: {target_path}')
+            
+            if video_dir.exists():
+                # Try to find video files first
+                video_files = list(video_dir.glob("*.mp4")) + list(video_dir.glob("*.webm")) + list(video_dir.glob("*.ogg"))
                 
-                lessons.append({
-                    'id': f"file_{idx}",
-                    'lesson_title': video_file.stem.replace("_", " ").title(),
-                    'lesson_description': f"Video lesson from {track} track",
-                    'lesson_number': idx,
-                    'video_path': video_path,
-                    'video_filename': video_file.name,
-                    'topic': 'knowledge_base',  # Default topic
-                    'duration_minutes': None,
-                    'difficulty_level': None,
-                    'module_name': track,
-                    'source': 'filesystem'
-                })
+                # Fallback Logic: If no video files, use .txt files [cite: 2025-12-20]
+                if not video_files:
+                    txt_files = list(video_dir.glob("*_En.txt")) + list(video_dir.glob("*.txt"))
+                    if txt_files:
+                        st.sidebar.write(f'⚠️ No video files found, using .txt files: {len(txt_files)} found')
+                        for idx, txt_file in enumerate(sorted(txt_files), 1):
+                            # Extract base name (remove _En.txt or .txt)
+                            base_name = txt_file.stem.replace("_En", "").replace("_en", "")
+                            # Determine video path based on which directory was found
+                            if found_in_static:
+                                video_path = f"static/videos/{track_dir}/{base_name}.mp4"
+                            else:
+                                video_path = f"assets/videos/{track_dir}/{base_name}.mp4"
+                            
+                            lessons.append({
+                                'id': f"file_{idx}_txt",
+                                'lesson_title': base_name.replace("_", " ").title(),
+                                'lesson_description': f"Video lesson from {track} track (Transcript only)",
+                                'lesson_number': idx,
+                                'video_path': None,  # No video file
+                                'video_filename': None,
+                                'transcript_path': str(txt_file),  # Store transcript path
+                                'topic': 'knowledge_base',  # Default topic
+                                'duration_minutes': None,
+                                'difficulty_level': None,
+                                'module_name': track,
+                                'source': 'filesystem_txt'
+                            })
+                else:
+                    # Process video files if found
+                    for idx, video_file in enumerate(sorted(video_files), 1):
+                        # Determine video path based on which directory was found
+                        if found_in_static:
+                            video_path = f"static/videos/{track_dir}/{video_file.name}"
+                        else:
+                            video_path = f"assets/videos/{track_dir}/{video_file.name}"
+                        
+                        lessons.append({
+                            'id': f"file_{idx}",
+                            'lesson_title': video_file.stem.replace("_", " ").title(),
+                            'lesson_description': f"Video lesson from {track} track",
+                            'lesson_number': idx,
+                            'video_path': video_path,
+                            'video_filename': video_file.name,
+                            'topic': 'knowledge_base',  # Default topic
+                            'duration_minutes': None,
+                            'difficulty_level': None,
+                            'module_name': track,
+                            'source': 'filesystem'
+                        })
     
     return lessons
+
+
+def show_academic_hub():
+    """Display Academic Hub with JLPT-focused Socratic assessment."""
+    st.header("📖 Academic Hub - JLPT Mastery")
+    
+    # Get candidate ID from session state
+    if 'selected_candidate_id' not in st.session_state:
+        st.error("No candidate selected. Please select a candidate from the 'Candidate View'.")
+        st.session_state.selected_candidate_id = "CANDIDATE_001"
+        st.info("Using placeholder candidate ID: CANDIDATE_001")
+    
+    candidate_id = st.session_state.selected_candidate_id
+    
+    # --- Sidebar Controls (mirroring Video Hub structure) ---
+    with st.sidebar:
+        st.header("Academic Hub Controls")
+        selected_language = st.radio('Language', ['En', 'Ne', 'Ja'], key='academic_language_radio', horizontal=True)
+        
+        # Level Filter Selectbox (N5, N4, N3) [cite: 2025-12-21]
+        st.markdown("---")
+        st.subheader("📚 JLPT Level Filter")
+        if 'academic_jlpt_level' not in st.session_state:
+            st.session_state.academic_jlpt_level = "N5"
+        
+        level_filter = st.selectbox(
+            "Select JLPT Level:",
+            options=["N5", "N4", "N3"],
+            key="academic_level_filter",
+            index=["N5", "N4", "N3"].index(st.session_state.academic_jlpt_level),
+            help="Filter lessons by JLPT level (N5, N4, or N3) [cite: 2025-12-21]"
+        )
+        st.session_state.academic_jlpt_level = level_filter
+        selected_level = level_filter  # Use for filtering lessons
+        
+        # --- Sensei Concierge Sidebar Container (mirroring Video Hub) ---
+        st.markdown("---")
+        st.subheader("🎓 JLPT Sensei")
+        
+        # Remove Toggle Dependency: Force sensei_chat_active = True for Academic Hub [cite: 2025-12-21]
+        sensei_chat_active = True  # Always active for JLPT mastery
+        
+        # Input Method Toggle (Text or Audio) - mirroring Video Hub
+        input_method = st.radio(
+            "Input Method:",
+            options=["text", "audio"],
+            format_func=lambda x: "⌨️ Text" if x == "text" else "🎤 Audio",
+            key="academic_input_method",
+            horizontal=True,
+            help="Choose how to interact with Sensei: Text input or Audio recording"
+        )
+        
+        # Persistent Greeting: Display static trilingual greeting block in sidebar [cite: 2025-12-20, 2025-12-21]
+        # Verify Sidebar Placement: Ensure Sensei Introduction is inside with st.sidebar: block [cite: 2025-12-21]
+        # UTF-8 encoding is used by default in Python 3 strings
+        st.markdown("---")
+        # Get lesson name from session state if available (will be updated when lesson is selected)
+        current_lesson_display = st.session_state.get('academic_current_lesson_name', 'Your JLPT Lesson')
+        
+        with st.expander("🎓 Sensei Introduction", expanded=True):
+            st.markdown("### Welcome to Your JLPT Lesson!")
+            st.markdown("""
+            **English:** Welcome! I'm your JLPT Sensei. Let's explore Japanese grammar together.
+            
+            **日本語 (Japanese):** ようこそ！私はあなたのJLPT先生です。
+            
+            **नेपाली (Nepali):** स्वागत छ! म तपाईंको JLPT Sensei हुँ।
+            """)
+            st.caption(f"📚 Current Lesson: {current_lesson_display}")
+    
+    # Load lessons for Academic track
+    lessons = load_video_lessons("Academic", selected_language)
+    
+    # Filter lessons by selected JLPT level
+    if lessons:
+        lessons = [lesson for lesson in lessons if selected_level in lesson.get('module_name', '') or selected_level in lesson.get('difficulty_level', '')]
+    
+    if not lessons:
+        st.warning(f"No lessons found for JLPT {selected_level}.")
+        return
+    
+    # Lesson Selection
+    st.subheader("📹 Select Lesson")
+    lesson_titles = [f"{lesson.get('lesson_number', i+1)}. {lesson.get('lesson_title', 'Untitled')}" for i, lesson in enumerate(lessons)]
+    
+    selected_lesson_idx = st.selectbox(
+        "Choose a lesson:",
+        options=range(len(lesson_titles)),
+        format_func=lambda x: lesson_titles[x],
+        key="academic_lesson_select",
+        index=None,
+        placeholder="Select a lesson..."
+    )
+    
+    # Display video and chat interface
+    if selected_lesson_idx is not None:
+        selected_lesson = lessons[selected_lesson_idx]
+        # Correct Lesson Name formatting: Match dropdown format 'N5 Particles Wa Ga' [cite: 2025-12-21]
+        lesson_number = selected_lesson.get("lesson_number", selected_lesson_idx + 1)
+        lesson_title = selected_lesson.get("lesson_title", "Untitled Lesson")
+        lesson_name = f"{lesson_number}. {lesson_title}"  # Format: "1. N5 Particles Wa Ga"
+        lesson_id = selected_lesson.get("id", f"lesson_{selected_lesson_idx}")
+        video_path_str = selected_lesson.get("video_path")
+        video_path = Path(project_root) / video_path_str if video_path_str else None
+        
+        # Clear chat history if a different lesson is selected
+        if 'academic_current_lesson_id' not in st.session_state:
+            st.session_state.academic_current_lesson_id = None
+        
+        if st.session_state.academic_current_lesson_id != lesson_id:
+            # New lesson selected - clear chat history to trigger new greeting
+            st.session_state.academic_chat_history = []
+            st.session_state.academic_current_lesson_id = lesson_id
+            st.session_state.academic_video_start_time = time.time()  # Reset timer
+            # Store lesson name in session state for sidebar display [cite: 2025-12-21]
+            st.session_state.academic_current_lesson_name = lesson_name
+        
+        # Load transcript (handle both video-based and transcript-only lessons)
+        # Transcript Variable: Ensure current_lesson_transcript is populated from .txt file [cite: 2025-12-20]
+        current_lesson_transcript = ""
+        transcript_path = None
+        
+        # Check if this is a transcript-only lesson (no video file)
+        if video_path_str is None or (video_path and not video_path.exists()):
+            # Try to load from transcript_path if available (transcript-only lessons)
+            transcript_path_str = selected_lesson.get("transcript_path")
+            if transcript_path_str:
+                transcript_path = Path(transcript_path_str)
+                if transcript_path.exists():
+                    try:
+                        current_lesson_transcript = transcript_path.read_text(encoding='utf-8').strip()
+                    except Exception as e:
+                        current_lesson_transcript = "Transcript file found but could not be read."
+                else:
+                    current_lesson_transcript = f"JLPT {selected_level} lesson on Japanese grammar and kanji."
+            else:
+                # Fallback: try to find transcript based on lesson title
+                current_lesson_transcript = f"JLPT {selected_level} lesson on Japanese grammar and kanji."
+        else:
+            # Video-based lesson: load transcript from video directory
+            if video_path and video_path.exists():
+                # Center the video
+                col_left, col_video, col_right = st.columns([1, 6, 1])
+                with col_video:
+                    st.video(str(video_path))
+                
+                # Load transcript
+                transcript_path = video_path.with_name(f"{video_path.stem}_En.txt")
+                if transcript_path.exists():
+                    try:
+                        current_lesson_transcript = transcript_path.read_text(encoding='utf-8').strip()
+                    except Exception as e:
+                        current_lesson_transcript = "Transcript file found but could not be read."
+                else:
+                    current_lesson_transcript = f"JLPT {selected_level} lesson on Japanese grammar and kanji."
+            else:
+                current_lesson_transcript = f"JLPT {selected_level} lesson on Japanese grammar and kanji."
+        
+        # Store transcript in session state for chat interface
+        st.session_state.current_lesson_transcript = current_lesson_transcript
+        
+        # Persistent Greeting: Static greeting is now displayed in chat sidebar, no auto-trigger needed [cite: 2025-12-20, 2025-12-21]
+        
+        # Chat interface (mirroring Video Hub exactly) [cite: 2025-12-21]
+        if sensei_chat_active:
+            st.markdown("---")
+            st.subheader("💬 Chat with JLPT Sensei")
+            
+            # Initialize video timestamp tracking (mirroring Video Hub)
+            if 'academic_video_start_time' not in st.session_state:
+                st.session_state.academic_video_start_time = time.time()
+            
+            # Calculate timer_elapsed (maps to video timestamp)
+            timer_elapsed = int(time.time() - st.session_state.academic_video_start_time)
+            
+            # Initialize audio processing state (MD5 hash check - mirroring Video Hub) [cite: 2025-12-21]
+            # Debug Check: Ensure MD5 hash check doesn't block first recording [cite: 2025-12-21]
+            if 'academic_last_audio_hash' not in st.session_state:
+                st.session_state.academic_last_audio_hash = None  # Initialize to None, not empty string
+            
+            # Session State Alignment: Initialize academic_audio_buffer to avoid conflicts [cite: 2025-12-21]
+            if 'academic_audio_buffer' not in st.session_state:
+                st.session_state.academic_audio_buffer = None
+            
+            # Get current lesson transcript from session state
+            current_lesson_transcript = st.session_state.get('current_lesson_transcript', '')
+            
+            # Note: Persistent Greeting is now displayed in the sidebar (moved for better placement) [cite: 2025-12-21]
+            
+            # Manual Chat Spark: Add button to start Socratic discussion [cite: 2025-12-21]
+            if len(st.session_state.academic_chat_history) == 0:
+                if st.button("💬 Start Socratic Discussion", key="start_academic_discussion", type="primary", use_container_width=True):
+                    # Verify transcript is populated
+                    if not current_lesson_transcript or not current_lesson_transcript.strip():
+                        current_lesson_transcript = st.session_state.get('current_lesson_transcript', '')
+                    
+                    if current_lesson_transcript and current_lesson_transcript.strip():
+                        current_page = st.session_state.get('current_page', '📖 Academic Hub')
+                        
+                        # Simplified Trilingual Prompt: Direct and simple [cite: 2025-12-20]
+                        initial_greeting_prompt = f"""Greeting: English first, then Japanese, then Nepali. Then ask one question about "{lesson_name}".
+
+**Lesson Transcript:**
+{current_lesson_transcript}
+
+**Your Response (trilingual greeting + one Socratic question):**
+"""
+                        
+                        # Call get_sensei_response with simplified prompt
+                        with st.spinner("🎓 Sensei is preparing your first question..."):
+                            initial_greeting = get_sensei_response(
+                                user_input=initial_greeting_prompt,
+                                conversation_history=[],
+                                transcript=current_lesson_transcript,
+                                timer_elapsed=0,
+                                track="Academic",
+                                current_page=current_page
+                            )
+                        
+                        st.session_state.academic_chat_history.append({
+                            'role': 'sensei',
+                            'content': initial_greeting
+                        })
+                        
+                        st.rerun()
+                    else:
+                        st.warning("⚠️ Lesson transcript not available. Please select a lesson first.")
+            
+            # Display chat history
+            if st.session_state.academic_chat_history:
+                for message in st.session_state.academic_chat_history:
+                    if message['role'] == 'sensei':
+                        with st.chat_message("assistant"):
+                            st.write(message['content'])
+                    elif message['role'] == 'user':
+                        with st.chat_message("user"):
+                            st.write(message['content'])
+            if 'academic_is_final_competency_mode' not in st.session_state:
+                st.session_state.academic_is_final_competency_mode = False
+            
+            # Chat input for user messages (Text mode)
+            if input_method == "text":
+                user_message = st.chat_input("Type your message to JLPT Sensei...")
+            else:
+                # Audio mode - mic_recorder (mirroring Video Hub)
+                user_message = None
+                try:
+                    from streamlit_mic_recorder import mic_recorder
+                    
+                    st.markdown("**🎤 Voice Input:**")
+                    # Recording Indicator: Add key and styling consistent with Concierge [cite: 2025-12-21]
+                    audio = mic_recorder(
+                        start_prompt="🎤 Start Recording",
+                        stop_prompt="🛑 Stop & Transcribe",
+                        key="academic_mic",  # Use academic_mic key for consistency [cite: 2025-12-21]
+                        use_container_width=True
+                    )
+                    
+                    # Microphone Status: Recording indicator placed directly above chat input area [cite: 2025-12-21]
+                    # Check if mic_recorder is currently recording
+                    if audio is not None:
+                        # If audio exists, it means recording has completed
+                        if isinstance(audio, dict) and 'bytes' in audio:
+                            st.success("✅ Recording complete! Processing...")
+                        elif isinstance(audio, dict):
+                            # Recording might be in progress - show status directly above chat input
+                            st.info("🎙️ Recording...")  # Microphone Status: Directly above chat input [cite: 2025-12-21]
+                    else:
+                        # No recording state - show ready state
+                        st.caption("💡 Click the button above to start recording")
+                    
+                    # Process audio when recording stops (with MD5 hash check) [cite: 2025-12-21]
+                    # Session State Alignment: Save to academic_audio_buffer to avoid conflicts [cite: 2025-12-21]
+                    if audio and isinstance(audio, dict) and 'bytes' in audio:
+                        # Store audio in academic-specific buffer
+                        st.session_state.academic_audio_buffer = audio['bytes']
+                        
+                        # Check if this is new audio (not already processed) - MD5 hash check
+                        # Debug Check: Ensure MD5 hash check doesn't block first recording [cite: 2025-12-21]
+                        import hashlib
+                        audio_hash = hashlib.md5(audio['bytes']).hexdigest()
+                        
+                        # Allow processing if hash is None (first recording) or different from last
+                        if st.session_state.academic_last_audio_hash is None or audio_hash != st.session_state.academic_last_audio_hash:
+                            st.session_state.academic_last_audio_hash = audio_hash
+                            
+                            # Show spinner during transcription
+                            with st.spinner("🎤 Sensei is transcribing your voice..."):
+                                # Transcribe audio from academic_audio_buffer
+                                transcribed_text = transcribe_audio_with_gemini(st.session_state.academic_audio_buffer)
+                                
+                                if transcribed_text and not transcribed_text.startswith("Error"):
+                                    # Check if we're in Final Competency mode
+                                    if st.session_state.academic_is_final_competency_mode:
+                                        # Append to final competency response
+                                        current_response = st.session_state.get('academic_competency_response', '')
+                                        st.session_state.academic_competency_response = current_response + " " + transcribed_text if current_response else transcribed_text
+                                        st.success(f"✅ Voice transcribed and added to Final Competency Statement: {transcribed_text}")
+                                    else:
+                                        # Microphone-to-Chat: Automatically append transcription to chat history [cite: 2025-12-21]
+                                        st.session_state.academic_chat_history.append({
+                                            'role': 'user',
+                                            'content': transcribed_text
+                                        })
+                                        
+                                        # Get Sensei response immediately with Academic Hub persona
+                                        # Transcript-to-Sensei: Ensure current_lesson_transcript is passed as system prompt context [cite: 2025-12-20]
+                                        current_page = st.session_state.get('current_page', '📖 Academic Hub')
+                                        current_lesson_transcript = st.session_state.get('current_lesson_transcript', '')
+                                        
+                                        # Ensure transcript is populated before calling get_sensei_response
+                                        if not current_lesson_transcript or not current_lesson_transcript.strip():
+                                            # Fallback: try to get from session state
+                                            current_lesson_transcript = st.session_state.get('current_lesson_transcript', '')
+                                        
+                                        sensei_response = get_sensei_response(
+                                            user_input=transcribed_text,
+                                            conversation_history=st.session_state.academic_chat_history,
+                                            transcript=current_lesson_transcript,  # Transcript passed as system context [cite: 2025-12-20]
+                                            timer_elapsed=timer_elapsed,
+                                            track="Academic",
+                                            current_page=current_page
+                                        )
+                                        
+                                        st.session_state.academic_chat_history.append({
+                                            'role': 'sensei',
+                                            'content': sensei_response
+                                        })
+                                        
+                                        st.success(f"✅ Voice transcribed: {transcribed_text}")
+                                    
+                                    # Rerun to update display
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Transcription failed: {transcribed_text}")
+                except ImportError:
+                    st.warning("⚠️ streamlit-mic-recorder not installed. Install with: pip install streamlit-mic-recorder")
+                    st.info("💡 Please use text input mode instead.")
+                except Exception as e:
+                    st.error(f"❌ Audio recording error: {str(e)}")
+            
+            if user_message:
+                # Add user message to chat history
+                st.session_state.academic_chat_history.append({
+                    'role': 'user',
+                    'content': user_message
+                })
+                
+                # Get Sensei response using Socratic logic with Academic Hub persona
+                current_page = st.session_state.get('current_page', '📖 Academic Hub')
+                current_lesson_transcript = st.session_state.get('current_lesson_transcript', '')
+                sensei_response = get_sensei_response(
+                    user_input=user_message,
+                    conversation_history=st.session_state.academic_chat_history,
+                    transcript=current_lesson_transcript,
+                    timer_elapsed=timer_elapsed,
+                    track="Academic",
+                    current_page=current_page
+                )
+                
+                st.session_state.academic_chat_history.append({
+                    'role': 'sensei',
+                    'content': sensei_response
+                })
+                
+                # Rerun to update the chat display
+                st.rerun()
+            
+            # Display timer and phase indicator
+            phase_indicator = "Evaluator" if timer_elapsed >= 180 else "Helpful Assistant"
+            st.caption(f"⏱️ Timer: {timer_elapsed}s | Phase: {phase_indicator}")
+            
+            # Clear chat button
+            if st.button("Clear Chat History", key="clear_academic_chat"):
+                st.session_state.academic_chat_history = []
+                st.session_state.academic_video_start_time = time.time()  # Reset timer
+                st.rerun()
+            
+            # Mastery Score Preview (mirroring Video Hub)
+            st.markdown("---")
+            st.subheader("📊 Mastery Score Preview")
+            mastery_scores, _ = calculate_mastery_scores(candidate_id)
+            if "Academic" in mastery_scores:
+                track_scores = mastery_scores["Academic"]
+                for skill, score in track_scores.items():
+                    st.metric(
+                        label=skill,
+                        value=f"{score:.1f}%",
+                        help=f"Current mastery level for {skill} in Academic track"
+                    )
+            else:
+                st.info("No mastery scores yet. Start chatting with Sensei to earn points!")
+        else:
+            # Show message when chat is inactive
+            st.info("Toggle 'Chat with Sensei' to start a conversation during video playback.")
+        
+        # Final Competency Submission (mirroring Video Hub exactly) [cite: 2025-12-21]
+        # Always accessible, regardless of chat state
+        st.markdown("---")
+        with st.expander("📝 Final Competency Submission", expanded=False):
+                st.markdown("**Submit your final response for JLPT competency assessment (up to 3,000 words):**")
+                
+                # Toggle for Final Competency mode (affects audio transcription destination)
+                final_competency_mode = st.checkbox(
+                    "🎤 Use voice input for Final Competency Statement",
+                    key="academic_final_competency_voice_mode",
+                    help="When enabled, voice recordings will be appended to this text area instead of the chat."
+                )
+                st.session_state.academic_is_final_competency_mode = final_competency_mode
+                
+                # Initialize final response in session state
+                if 'academic_competency_response' not in st.session_state:
+                    st.session_state.academic_competency_response = ""
+                
+                # Text area with live word counter (mirroring Video Hub) [cite: 2025-12-21]
+                final_response = st.text_area(
+                    "Your final competency response:",
+                    value=st.session_state.academic_competency_response,
+                    key="academic_final_response_text_area",
+                    height=300,
+                    help="Write your comprehensive response here. The word counter will update in real-time."
+                )
+                
+                # Live word counter (mirroring Video Hub) [cite: 2025-12-21]
+                word_count = len(final_response.split()) if final_response else 0
+                max_words = 3000
+                word_count_color = "green" if word_count <= max_words else "red"
+                st.markdown(
+                    f"<p style='text-align: right; color: {word_count_color}; font-weight: bold;'>"
+                    f"Words: {word_count} / {max_words}</p>",
+                    unsafe_allow_html=True
+                )
+                
+                # Update session state
+                st.session_state.academic_competency_response = final_response
+                
+                # Submit button (mirroring Video Hub)
+                col_submit1, col_submit2, col_submit3 = st.columns([2, 1, 2])
+                with col_submit2:
+                    submit_clicked = st.button(
+                        "🚀 Submit to Sensei",
+                        key="submit_academic_response",
+                        type="primary",
+                        use_container_width=True,
+                        disabled=word_count == 0 or word_count > max_words
+                    )
+                
+                if submit_clicked:
+                    if word_count == 0:
+                        st.error("Please enter a response before submitting.")
+                    elif word_count > max_words:
+                        st.error(f"Response exceeds {max_words} words. Please shorten your response.")
+                    else:
+                        # Show spinner and grade
+                        with st.spinner("Grading in Progress... Please wait while Sensei evaluates your response."):
+                            try:
+                                from agency.training_agent.competency_grading_tool import CompetencyGradingTool
+                                
+                                # Map language code
+                                lang_map = {"En": "en", "Ne": "ne", "Ja": "ja"}
+                                language_code = lang_map.get(selected_language, "en")
+                                
+                                # Call CompetencyGradingTool
+                                # Force Initialization: Tool initialization verified [cite: 2025-12-21]
+                                grading_tool = CompetencyGradingTool()
+                                
+                                grading_result = grading_tool.run(
+                                    response=final_response,
+                                    candidate_id=candidate_id,
+                                    track="Academic",
+                                    language=language_code
+                                )
+                                
+                                # Display results
+                                st.success("✅ Assessment Complete! Your response has been graded.")
+                                
+                                # Show grading results
+                                if isinstance(grading_result, dict):
+                                    st.markdown("### 📊 Grading Results")
+                                    col_grade1, col_grade2 = st.columns(2)
+                                    with col_grade1:
+                                        st.metric("Overall Grade", f"{grading_result.get('grade', 'N/A')}/10")
+                                    with col_grade2:
+                                        st.info(f"**Accuracy:** {grading_result.get('accuracy_feedback', 'No feedback')}")
+                                    st.info(f"**Grammar:** {grading_result.get('grammar_feedback', 'No feedback')}")
+                                
+                                # Success toast
+                                st.toast("🎉 Your competency assessment has been submitted successfully!")
+                                
+                                # Link to Progress Dashboard
+                                st.markdown("---")
+                                st.markdown("### 📊 View Your Progress")
+                                st.info(
+                                    "Your scores have been updated. Click the button below to view your detailed progress report."
+                                )
+                                if st.button("📈 Go to Progress Dashboard", key="go_to_progress_from_academic"):
+                                    # Switch to Progress Dashboard page
+                                    st.session_state.page = "Progress"
+                                    st.session_state.current_page = "Progress"
+                                    st.rerun()
+                                
+                                # Clear the response after successful submission
+                                st.session_state.academic_competency_response = ""
+                                
+                            except ImportError:
+                                st.error("Competency grading tool is not available. Please ensure all dependencies are installed.")
+                            except Exception as e:
+                                st.error(f"An error occurred during grading: {str(e)}")
+                                import traceback
+                                if config.DEBUG:
+                                    with st.expander("Debug Info"):
+                                        st.code(traceback.format_exc())
 
 
 def show_live_simulator():
