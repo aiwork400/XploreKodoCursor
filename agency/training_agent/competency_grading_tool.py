@@ -6,6 +6,7 @@ from google import genai
 import json
 import os
 from datetime import datetime
+from pathlib import Path
 
 class GradingInput(BaseModel):
     response: str = Field(description="The student's competency statement")
@@ -56,23 +57,103 @@ class CompetencyGradingTool(BaseTool):
         }
         language_name = language_map.get(language, "English")
 
+        # Knowledge Grounding: Look for transcript file matching lesson_name [cite: 2025-12-20, 2025-12-21]
+        transcript_content = None
+        if lesson_name:
+            # Try to find transcript file in assets/transcripts/ directory
+            project_root = Path(__file__).parent.parent.parent
+            transcripts_dir = project_root / "assets" / "transcripts"
+            
+            # Normalize lesson_name to filename (remove special chars, spaces to underscores)
+            safe_lesson_name = lesson_name.replace(" ", "_").replace(".", "").replace("/", "_").lower()
+            
+            # Try multiple filename patterns
+            possible_files = [
+                transcripts_dir / f"{safe_lesson_name}.txt",
+                transcripts_dir / f"{lesson_name}.txt",
+                transcripts_dir / f"{safe_lesson_name.replace('_', '-')}.txt",
+            ]
+            
+            # Also try with common prefixes/suffixes
+            if "n5" in safe_lesson_name.lower() or "n4" in safe_lesson_name.lower() or "n3" in safe_lesson_name.lower():
+                # Extract level and base name
+                for level in ["n5", "n4", "n3"]:
+                    if level in safe_lesson_name.lower():
+                        base_name = safe_lesson_name.replace(level, "").strip("_").strip("-")
+                        possible_files.extend([
+                            transcripts_dir / f"{level}_{base_name}.txt",
+                            transcripts_dir / f"{level}/{base_name}.txt",
+                            transcripts_dir / f"{level}/{safe_lesson_name}.txt",
+                        ])
+            
+            # Try to read transcript file
+            for transcript_file in possible_files:
+                if transcript_file.exists():
+                    try:
+                        transcript_content = transcript_file.read_text(encoding='utf-8').strip()
+                        break
+                    except Exception as e:
+                        print(f"Warning: Could not read transcript file {transcript_file}: {e}")
+                        continue
+        
+        # Fallback: Use default General N5 Vocational Safety guidelines if no transcript found [cite: 2025-12-20]
+        if not transcript_content:
+            transcript_content = """General N5 Vocational Safety Guidelines:
+
+1. Kitchen Safety Basics:
+   - Always wash hands before handling food
+   - Use proper cutting techniques to avoid injury
+   - Keep work surfaces clean and sanitized
+   - Store food at appropriate temperatures
+
+2. Hygiene Standards:
+   - Wear clean uniforms and hairnets
+   - Follow proper handwashing procedures
+   - Maintain personal cleanliness
+   - Report any health issues immediately
+
+3. Equipment Safety:
+   - Use equipment only after proper training
+   - Report malfunctioning equipment
+   - Follow manufacturer instructions
+   - Keep equipment clean and maintained
+
+4. Food Handling:
+   - Follow FIFO (First In, First Out) principles
+   - Check expiration dates regularly
+   - Maintain proper temperature logs
+   - Prevent cross-contamination
+
+These guidelines form the foundation of commercial kitchen safety and should be followed at all times."""
+        
+        # Context Injection: Inject transcript content into prompt as Primary Study Material [cite: 2025-12-20]
+        primary_material_section = ""
+        if transcript_content:
+            primary_material_section = f"""
+**Primary Study Material:**
+{transcript_content}
+
+"""
+        
         prompt = f"""You are an expert AI language coach. Your task is to grade the following transcript based on its content, grammar, and overall coherence. The user is in the '{track}' track.
 
-        **Transcript:**
-        "{response}"
+{primary_material_section}**Student Response to Grade:**
+"{response}"
 
-        **Instructions:**
-        - Provide a single overall grade from 1-10.
-        - Provide feedback on accuracy and grammar.
-        - Keep feedback concise and helpful.
+**Instructions:**
+- Grade the student's response based on how well it demonstrates understanding of the Primary Study Material above.
+- Provide a single overall grade from 1-10.
+- Provide feedback on accuracy (how well it aligns with the study material) and grammar.
+- Keep feedback concise and helpful.
+- Reference specific points from the Primary Study Material when relevant.
 
-        **Output Format (JSON):**
-        {{
-            "grade": <number 1-10>,
-            "accuracy_feedback": "<feedback>",
-            "grammar_feedback": "<feedback>"
-        }}
-        """
+**Output Format (JSON):**
+{{
+    "grade": <number 1-10>,
+    "accuracy_feedback": "<feedback>",
+    "grammar_feedback": "<feedback>"
+}}
+"""
 
         try:
             # SDK Compatibility Fix: Remove generation_config if it causes issues [cite: 2025-12-21]

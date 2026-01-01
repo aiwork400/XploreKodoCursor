@@ -1070,6 +1070,9 @@ Keep it brief (2-3 sentences) and friendly.
 **System Context - Lesson Transcript:**
 {transcript}
 
+**CRITICAL: Knowledge Limitation**
+Your knowledge is strictly limited to the provided vocational transcript for the current lesson. If the student asks something outside this scope, guide them back to the lesson material. Do not provide information that is not in the transcript. [cite: 2025-12-20, 2025-12-21]
+
 **CRITICAL: Trilingual Response Format**
 Every single response you give MUST follow this exact Markdown format. There are NO exceptions:
 
@@ -1084,6 +1087,7 @@ Every single response you give MUST follow this exact Markdown format. There are
 - You ask guiding questions that help the student discover the answers themselves.
 - You focus on Japanese grammar, particles (wa, ga, ni, wo, de, etc.), kanji, and JLPT concepts.
 - EVERY response must include all three languages in the format above.
+- Sensei Interaction: If the student asks about topics not in the transcript, politely redirect them to the lesson material. [cite: 2025-12-20, 2025-12-21]
 
 **Current Phase: {phase.upper()}**
 {phase_instruction}
@@ -2071,6 +2075,57 @@ def _generate_fallback_summary(mastery_scores: dict) -> str:
 def show_progress_dashboard():
     """Display Student Performance Heatmap with mastery scores."""
     st.header("📊 Progress Dashboard - Student Performance Heatmap")
+    
+    # Data Source: Load mastery stats from user_progress.json [cite: 2025-12-21]
+    total_word_count, lesson_history = load_mastery_stats()
+    
+    # Milestone Celebration: Check if word count increased since last session [cite: 2025-12-21]
+    if 'last_word_count' not in st.session_state:
+        st.session_state.last_word_count = 0
+    
+    if total_word_count > st.session_state.last_word_count:
+        st.balloons()  # Milestone Celebration: Trigger balloons for 2026 progress [cite: 2025-12-21]
+        st.session_state.last_word_count = total_word_count
+    
+    # Visual Progress Bar: Display large progress bar at top [cite: 2025-12-21]
+    progress_value = min(total_word_count / 3000.0, 1.0)  # Calculation: min(total_word_count / 3000, 1.0) [cite: 2025-12-21]
+    st.progress(progress_value)
+    
+    # Sub-header: Show word count toward target [cite: 2025-12-21]
+    st.subheader(f'{total_word_count} / 3,000 words toward Commercial Center Competency')
+    
+    # Activity Log: Display lesson_history in dataframe [cite: 2025-12-21]
+    if lesson_history:
+        st.markdown("---")
+        st.subheader("📚 Activity Log")
+        
+        # Prepare dataframe with Timestamp, Lesson Name, and Accuracy Score [cite: 2025-12-21]
+        activity_data = []
+        for entry in lesson_history:
+            timestamp = entry.get("timestamp", "N/A")
+            lesson_name = entry.get("lesson", "Unknown Lesson")
+            scores = entry.get("scores", {})
+            accuracy_score = scores.get("grade", "N/A")  # Grade is the accuracy score (1-10)
+            
+            activity_data.append({
+                "Timestamp": timestamp,
+                "Lesson Name": lesson_name,
+                "Accuracy Score": accuracy_score
+            })
+        
+        if activity_data:
+            activity_df = pd.DataFrame(activity_data)
+            # Format timestamp for better readability
+            try:
+                activity_df["Timestamp"] = pd.to_datetime(activity_df["Timestamp"]).dt.strftime("%Y-%m-%d %H:%M:%S")
+            except:
+                pass  # Keep original format if parsing fails
+            
+            st.dataframe(activity_df, use_container_width=True, hide_index=True)
+    else:
+        st.info("No lesson history available yet. Complete lessons to see your progress!")
+    
+    st.markdown("---")
     
     # Get candidate ID
     candidate_id = st.session_state.get('selected_candidate_id')
@@ -3211,7 +3266,12 @@ def load_video_lessons(track: str, language: str) -> list[dict]:
 def load_mastery_stats():
     """
     UI Sync: Load mastery stats from persistent JSON file [cite: 2025-12-21]
-    Returns total_word_count from assets/user_progress.json
+    Data Source: Returns total_word_count and lesson_history from assets/user_progress.json [cite: 2025-12-21]
+    
+    Returns:
+        tuple: (total_word_count, lesson_history)
+            - total_word_count: int - Total words learned
+            - lesson_history: list - List of lesson entries with timestamp, lesson, and scores
     """
     import json
     import os
@@ -3223,10 +3283,12 @@ def load_mastery_stats():
         try:
             with open(progress_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                return data.get("total_word_count", 0)
+                total_word_count = data.get("total_word_count", 0)
+                lesson_history = data.get("lesson_history", [])
+                return total_word_count, lesson_history
         except (json.JSONDecodeError, KeyError, IOError):
-            return 0
-    return 0
+            return 0, []
+    return 0, []
 
 
 def show_academic_hub():
@@ -3234,7 +3296,7 @@ def show_academic_hub():
     st.header("📖 Academic Hub - JLPT Mastery")
     
     # Mastery Dashboard: Display total word count at top of Academic Hub [cite: 2025-12-21]
-    total_count = load_mastery_stats()
+    total_count, _ = load_mastery_stats()  # Updated to handle tuple return [cite: 2025-12-21]
     st.metric(
         label="Global Vocabulary Count",
         value=total_count,

@@ -1,5 +1,5 @@
 {
-    "total_word_count": 65,
+    "total_word_count": 75,
     "lesson_history": [
         {
             "timestamp": "2026-01-01T17:21:56.832071",
@@ -39,6 +39,16 @@
                 "word_count": 19,
                 "accuracy_feedback": "The translation of 安全靴 (Anzen-gutsu) as 'safety shoes' is accurate. 衛生 (Eisei) referring to hygiene/sanitation is also accurate. However, specifying 'safety shoes' instead of simply 安全靴 and 'hygiene' instead of 衛生 would make the sentence flow more naturally in English.",
                 "grammar_feedback": "The grammar is generally correct, but the sentence sounds slightly stilted. Combining the two ideas into one sentence might improve flow: 'I will always wear safety shoes (安全靴) and maintain kitchen hygiene (衛生) because sanitation is my top priority.'"
+            }
+        },
+        {
+            "timestamp": "2026-01-01T22:13:28.408265",
+            "lesson": "3. N5 Kitchen Safety & Hygiene",
+            "scores": {
+                "grade": 7,
+                "word_count": 10,
+                "accuracy_feedback": "The statement's accuracy depends on the context. More information would be needed to fully assess its truthfulness. What 'they' refers to is unclear.",
+                "grammar_feedback": "The grammar is technically correct, but the semicolon is slightly unconventional in such a short sentence. A comma or simply separating it into two sentences would be more common and perhaps clearer. Using 'Yes, they are...' is better."
             }
         }
     ]
