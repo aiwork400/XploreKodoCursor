@@ -1064,23 +1064,26 @@ Keep it brief (2-3 sentences) and friendly.
         elif current_page == "📖 Academic Hub" or current_page == "Academic Hub":
             # JLPT Sensei persona for Academic Hub [cite: 2025-12-20]
             # Transcript-to-Sensei: Ensure transcript is used as system prompt context [cite: 2025-12-20]
+            # Trilingual Protocol: System prompt enforces exact Markdown format [cite: 2025-12-21]
             prompt = f"""You are a Socratic Japanese Language Teacher. Your goal is to guide the student to understand grammar, particles, and kanji. Use the transcript provided. If they make a mistake with a particle (like wa vs ga), ask them to explain the function of the particle instead of correcting them immediately.
 
 **System Context - Lesson Transcript:**
 {transcript}
 
-**Language Instructions:**
-Based on the transcript context above, you should be prepared to speak in English, Japanese (Kanji/Kana), and Nepali (Devanagari) as needed. The transcript provides the lesson context that informs your responses.
+**CRITICAL: Trilingual Response Format**
+Every single response you give MUST follow this exact Markdown format. There are NO exceptions:
+
+🇬🇧 English: [Your Socratic question/feedback in English]
+
+🇯🇵 Japanese: [Translation of the English part into Japanese using Kanji/Kana]
+
+🇳🇵 Nepali: [Translation of the English part into Nepali using Devanagari script]
 
 **Your Role:**
 - You are a Socratic teacher. You DO NOT give direct answers.
 - You ask guiding questions that help the student discover the answers themselves.
 - You focus on Japanese grammar, particles (wa, ga, ni, wo, de, etc.), kanji, and JLPT concepts.
-
-**Language Detection:**
-- Detect the language the student is using (English, Japanese, or Nepali).
-- Respond in the SAME language the student uses.
-- If the student mixes languages, respond in the primary language they're using.
+- EVERY response must include all three languages in the format above.
 
 **Current Phase: {phase.upper()}**
 {phase_instruction}
@@ -1109,7 +1112,7 @@ Based on the transcript context above, you should be prepared to speak in Englis
 **Student's Latest Input:**
 User input: {user_input!r}
 
-**Your Response (as JLPT Sensei, in the student's language, using Socratic questioning):**
+**Your Response (as JLPT Sensei, using Socratic questioning, in the EXACT trilingual format shown above):**
 """
         else:
             # Food/Tech Sensei persona (default)
@@ -3462,11 +3465,13 @@ def show_academic_hub():
                         st.warning("⚠️ Lesson transcript not available. Please select a lesson first.")
             
             # Display chat history
+            # UI Rendering: Ensure Markdown blocks render correctly [cite: 2025-12-21]
             if st.session_state.academic_chat_history:
                 for message in st.session_state.academic_chat_history:
                     if message['role'] == 'sensei':
                         with st.chat_message("assistant"):
-                            st.write(message['content'])
+                            # UI Rendering: Use st.markdown to properly render trilingual Markdown blocks [cite: 2025-12-21]
+                            st.markdown(message['content'])
                     elif message['role'] == 'user':
                         with st.chat_message("user"):
                             st.write(message['content'])
@@ -3505,8 +3510,13 @@ def show_academic_hub():
                         st.caption("💡 Click the button above to start recording")
                     
                     # Process audio when recording stops (with MD5 hash check) [cite: 2025-12-21]
+                    # Audio Input Hook: Store audio data and show message [cite: 2025-12-21]
+                    # Link to UI: Connect audio hook to OpenAI Whisper [cite: 2025-12-21]
                     # Session State Alignment: Save to academic_audio_buffer to avoid conflicts [cite: 2025-12-21]
                     if audio and isinstance(audio, dict) and 'bytes' in audio:
+                        # Audio Input Hook: Store audio data in temporary session state variable [cite: 2025-12-21]
+                        st.session_state.last_audio_data = audio['bytes']
+                        
                         # Store audio in academic-specific buffer
                         st.session_state.academic_audio_buffer = audio['bytes']
                         
@@ -3519,19 +3529,28 @@ def show_academic_hub():
                         if st.session_state.academic_last_audio_hash is None or audio_hash != st.session_state.academic_last_audio_hash:
                             st.session_state.academic_last_audio_hash = audio_hash
                             
-                            # Show spinner during transcription
-                            with st.spinner("🎤 Sensei is transcribing your voice..."):
-                                # Transcribe audio from academic_audio_buffer
-                                transcribed_text = transcribe_audio_with_gemini(st.session_state.academic_audio_buffer)
+                            # Link to UI: Immediately call transcribe_audio() when audio is detected [cite: 2025-12-21]
+                            try:
+                                from api.utils import transcribe_audio
                                 
+                                # Show spinner during transcription
+                                with st.spinner("🎤 Transcribing with Whisper..."):
+                                    # Transcribe audio using OpenAI Whisper (multilingual support: English, Japanese, Nepali)
+                                    transcribed_text = transcribe_audio(st.session_state.last_audio_data)
+                                
+                                # Link to UI: Store transcribed text in appropriate variable [cite: 2025-12-21]
                                 if transcribed_text and not transcribed_text.startswith("Error"):
                                     # Check if we're in Final Competency mode
                                     if st.session_state.academic_is_final_competency_mode:
-                                        # Append to final competency response
+                                        # Store in competency response text area
                                         current_response = st.session_state.get('academic_competency_response', '')
                                         st.session_state.academic_competency_response = current_response + " " + transcribed_text if current_response else transcribed_text
-                                        st.success(f"✅ Voice transcribed and added to Final Competency Statement: {transcribed_text}")
+                                        st.success("Speech-to-Text complete!")  # Link to UI: Display success message [cite: 2025-12-21]
                                     else:
+                                        # Store in chat history for normal conversation
+                                        st.session_state.academic_competency_response = transcribed_text
+                                        st.success("Speech-to-Text complete!")  # Link to UI: Display success message [cite: 2025-12-21]
+                                        
                                         # Microphone-to-Chat: Automatically append transcription to chat history [cite: 2025-12-21]
                                         st.session_state.academic_chat_history.append({
                                             'role': 'user',
@@ -3561,8 +3580,59 @@ def show_academic_hub():
                                             'role': 'sensei',
                                             'content': sensei_response
                                         })
+                                    
+                                    # Rerun to update display
+                                    st.rerun()
+                                else:
+                                    st.error(f"Transcription failed: {transcribed_text}")
+                            except ImportError:
+                                # Fallback to Gemini transcription if OpenAI is not available
+                                st.warning("OpenAI Whisper not available. Falling back to Gemini transcription.")
+                                with st.spinner("🎤 Sensei is transcribing your voice..."):
+                                    # Transcribe audio from academic_audio_buffer using Gemini fallback
+                                    transcribed_text = transcribe_audio_with_gemini(st.session_state.academic_audio_buffer)
+                                
+                                if transcribed_text and not transcribed_text.startswith("Error"):
+                                    # Check if we're in Final Competency mode
+                                    if st.session_state.academic_is_final_competency_mode:
+                                        # Store in competency response text area
+                                        current_response = st.session_state.get('academic_competency_response', '')
+                                        st.session_state.academic_competency_response = current_response + " " + transcribed_text if current_response else transcribed_text
+                                        st.success("Speech-to-Text complete!")  # Link to UI: Display success message [cite: 2025-12-21]
+                                    else:
+                                        # Store in chat history for normal conversation
+                                        st.session_state.academic_competency_response = transcribed_text
+                                        st.success("Speech-to-Text complete!")  # Link to UI: Display success message [cite: 2025-12-21]
                                         
-                                        st.success(f"✅ Voice transcribed: {transcribed_text}")
+                                        # Microphone-to-Chat: Automatically append transcription to chat history [cite: 2025-12-21]
+                                        st.session_state.academic_chat_history.append({
+                                            'role': 'user',
+                                            'content': transcribed_text
+                                        })
+                                        
+                                        # Get Sensei response immediately with Academic Hub persona
+                                        # Transcript-to-Sensei: Ensure current_lesson_transcript is passed as system prompt context [cite: 2025-12-20]
+                                        current_page = st.session_state.get('current_page', '📖 Academic Hub')
+                                        current_lesson_transcript = st.session_state.get('current_lesson_transcript', '')
+                                        
+                                        # Ensure transcript is populated before calling get_sensei_response
+                                        if not current_lesson_transcript or not current_lesson_transcript.strip():
+                                            # Fallback: try to get from session state
+                                            current_lesson_transcript = st.session_state.get('current_lesson_transcript', '')
+                                        
+                                        sensei_response = get_sensei_response(
+                                            user_input=transcribed_text,
+                                            conversation_history=st.session_state.academic_chat_history,
+                                            transcript=current_lesson_transcript,  # Transcript passed as system context [cite: 2025-12-20]
+                                            timer_elapsed=timer_elapsed,
+                                            track="Academic",
+                                            current_page=current_page
+                                        )
+                                        
+                                        st.session_state.academic_chat_history.append({
+                                            'role': 'sensei',
+                                            'content': sensei_response
+                                        })
                                     
                                     # Rerun to update display
                                     st.rerun()
@@ -3646,6 +3716,68 @@ def show_academic_hub():
                 # Initialize final response in session state
                 if 'academic_competency_response' not in st.session_state:
                     st.session_state.academic_competency_response = ""
+                
+                # Force Visibility: Audio recorder in Final Competency section [cite: 2025-12-21]
+                if final_competency_mode:
+                    try:
+                        from streamlit_mic_recorder import mic_recorder
+                        from api.utils import transcribe_audio
+                        import hashlib
+                        
+                        st.markdown("**🎤 Voice Recording:**")
+                        # Force Visibility: Ensure mic_recorder is called explicitly [cite: 2025-12-21]
+                        audio_data = mic_recorder(
+                            start_prompt="🎤 Start Recording",
+                            stop_prompt="🛑 Stop Recording",
+                            key="academic_final_competency_mic",
+                            use_container_width=True
+                        )
+                        
+                        # Check if audio has bytes
+                        audio_bytes = None
+                        if audio_data is not None and isinstance(audio_data, dict) and 'bytes' in audio_data:
+                            audio_bytes = audio_data['bytes']
+                        
+                        # Debug Mode: Show when audio bytes are detected [cite: 2025-12-21]
+                        if audio_bytes is not None:
+                            st.write("Debug: Audio bytes detected")
+                            
+                            # Check if this is new audio (not already processed) - MD5 hash check
+                            if 'academic_final_competency_last_audio_hash' not in st.session_state:
+                                st.session_state.academic_final_competency_last_audio_hash = None
+                            
+                            audio_hash = hashlib.md5(audio_bytes).hexdigest()
+                            
+                            # Allow processing if hash is None (first recording) or different from last
+                            if st.session_state.academic_final_competency_last_audio_hash is None or audio_hash != st.session_state.academic_final_competency_last_audio_hash:
+                                st.session_state.academic_final_competency_last_audio_hash = audio_hash
+                                
+                                # Immediate Feedback: Show spinner when recording stops [cite: 2025-12-21]
+                                with st.spinner("Transcribing your voice..."):
+                                    try:
+                                        # Transcribe using Whisper
+                                        transcribed_text = transcribe_audio(audio_bytes)
+                                        
+                                        if transcribed_text and not transcribed_text.startswith("Error"):
+                                            # The Bridge: Append directly to academic_competency_response [cite: 2025-12-21]
+                                            current_response = st.session_state.get('academic_competency_response', '')
+                                            if current_response:
+                                                st.session_state.academic_competency_response = current_response + " " + transcribed_text
+                                            else:
+                                                st.session_state.academic_competency_response = transcribed_text
+                                            
+                                            st.success("Speech-to-Text complete! ✅")
+                                            st.rerun()  # Rerun to update text area
+                                        else:
+                                            st.error(f"Transcription failed: {transcribed_text}")
+                                    except ImportError:
+                                        st.error("OpenAI Whisper not available. Please install: pip install openai")
+                                    except Exception as e:
+                                        st.error(f"Error during transcription: {str(e)}")
+                    except ImportError:
+                        st.warning("⚠️ streamlit-mic-recorder not installed. Install with: pip install streamlit-mic-recorder")
+                    except Exception as e:
+                        st.error(f"Error initializing microphone: {str(e)}")
                 
                 # Text area with live word counter (mirroring Video Hub) [cite: 2025-12-21]
                 final_response = st.text_area(
