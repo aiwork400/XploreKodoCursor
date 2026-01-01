@@ -76,19 +76,19 @@ if css_path.exists():
 else:
     # Fallback CSS if file doesn't exist
     st.markdown(
-        """
-        <style>
-        .main-header {
-            font-size: 2.5rem;
-            font-weight: bold;
+    """
+    <style>
+    .main-header {
+        font-size: 2.5rem;
+        font-weight: bold;
             color: #002147;
-            text-align: center;
-            margin-bottom: 2rem;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 def get_db_session() -> Session:
@@ -2767,11 +2767,16 @@ def show_video_hub():
                                 # Force Initialization: Tool initialization verified [cite: 2025-12-21]
                                 grading_tool = CompetencyGradingTool()
                                 
+                                # The Call: Verify arguments match tool definition [cite: 2025-12-21]
+                                # Get lesson name if available (for Video Hub)
+                                current_lesson_name = st.session_state.get('current_lesson_name', None)
+                                
                                 grading_result = grading_tool.run(
                                     response=final_response,
                                     candidate_id=candidate_id,
                                     track=selected_track,
-                                    language=language_code
+                                    language=language_code,
+                                    lesson_name=current_lesson_name  # Pass lesson_name to match signature
                                 )
                                 
                                 # Display results
@@ -2862,11 +2867,13 @@ def show_video_hub():
                     dialogue_text = "\n".join([f"{msg.get('role', 'user')}: {msg.get('content', '')}" for msg in st.session_state.dialogue_history]) if st.session_state.dialogue_history else ""
                     # Force Initialization: Tool initialization verified [cite: 2025-12-21]
                     grading_tool = CompetencyGradingTool()
+                    # The Call: Verify arguments match tool definition [cite: 2025-12-21]
                     grading_result = grading_tool.run(
                         response=dialogue_text,
                         candidate_id=candidate_id,
                         track="Academic",  # Default track
-                        language="en"  # Default language
+                        language="en",  # Default language
+                        lesson_name=None  # Explicitly pass lesson_name to match signature
                     )
                     st.success("Competency assessment complete! Your Progress Report has been updated.")
                     st.info(f"Grading Result: {grading_result}")
@@ -3040,20 +3047,63 @@ def load_video_lessons(track: str, language: str) -> list[dict]:
                             txt_files = list(level_dir.glob("*_En.txt")) + list(level_dir.glob("*.txt"))
                             if txt_files:
                                 st.sidebar.write(f'⚠️ No video files found, using .txt files: {len(txt_files)} found')
-                                for idx, txt_file in enumerate(sorted(txt_files), 1):
+                                
+                                # Lesson Data: Special handling for specific lessons [cite: 2025-12-21]
+                                # Define custom lesson titles and ordering for known files
+                                custom_lesson_map = {
+                                    'n5_kitchen_safety': {
+                                        'title': 'N5 Kitchen Safety & Hygiene',
+                                        'order': 2  # Ensure it appears as lesson 2
+                                    },
+                                    'n5_particles_wa_ga': {
+                                        'title': 'N5 Particles Wa Ga',
+                                        'order': 1  # Ensure it appears as lesson 1
+                                    }
+                                }
+                                
+                                # Sort files with custom ordering
+                                def get_file_sort_key(txt_file):
+                                    base_name = txt_file.stem.replace("_En", "").replace("_en", "")
+                                    if base_name in custom_lesson_map:
+                                        return (custom_lesson_map[base_name]['order'], base_name)
+                                    return (999, base_name)  # Unknown files go to end
+                                
+                                sorted_txt_files = sorted(txt_files, key=get_file_sort_key)
+                                
+                                for idx, txt_file in enumerate(sorted_txt_files, 1):
                                     # Extract base name (remove _En.txt or .txt)
                                     base_name = txt_file.stem.replace("_En", "").replace("_en", "")
+                                    
+                                    # File Link: Map n5_kitchen_safety to correct path [cite: 2025-12-20, 2025-12-21]
+                                    # Check if this is the kitchen safety lesson
+                                    if base_name == 'n5_kitchen_safety':
+                                        # Ensure transcript path points to assets/videos/academic/n5/n5_kitchen_safety.txt
+                                        transcript_path = str(txt_file)
+                                        if not transcript_path.endswith('n5_kitchen_safety.txt'):
+                                            # Construct correct path
+                                            transcript_path = str(level_dir / 'n5_kitchen_safety.txt')
+                                        
+                                        lesson_title = 'N5 Kitchen Safety & Hygiene'
+                                    elif base_name in custom_lesson_map:
+                                        lesson_title = custom_lesson_map[base_name]['title']
+                                        transcript_path = str(txt_file)
+                                    else:
+                                        # Default title generation
+                                        lesson_title = f"{level_display_map.get(level, level.upper())} - {base_name.replace('_', ' ').title()}"
+                                        transcript_path = str(txt_file)
+                                    
                                     # Create a placeholder video path (will be handled gracefully by UI)
                                     video_path = f"assets/videos/academic/{matching_dir}/{base_name}.mp4"
                                     display_level = level_display_map.get(level, level.upper())
+                                    
                                     lessons.append({
                                         'id': f"file_{level}_{idx}_txt",
-                                        'lesson_title': f"{display_level} - {base_name.replace('_', ' ').title()}",
+                                        'lesson_title': lesson_title,
                                         'lesson_description': f"JLPT {display_level} lesson from Academic track (Transcript only)",
                                         'lesson_number': idx,
                                         'video_path': None,  # No video file
                                         'video_filename': None,
-                                        'transcript_path': str(txt_file),  # Store transcript path
+                                        'transcript_path': transcript_path,  # Store transcript path
                                         'topic': f'jlpt_{level}',
                                         'duration_minutes': None,
                                         'difficulty_level': display_level,
@@ -3155,9 +3205,39 @@ def load_video_lessons(track: str, language: str) -> list[dict]:
     return lessons
 
 
+def load_mastery_stats():
+    """
+    UI Sync: Load mastery stats from persistent JSON file [cite: 2025-12-21]
+    Returns total_word_count from assets/user_progress.json
+    """
+    import json
+    import os
+    from pathlib import Path
+    
+    progress_file = Path(__file__).parent.parent / "assets" / "user_progress.json"
+    
+    if progress_file.exists():
+        try:
+            with open(progress_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("total_word_count", 0)
+        except (json.JSONDecodeError, KeyError, IOError):
+            return 0
+    return 0
+
+
 def show_academic_hub():
     """Display Academic Hub with JLPT-focused Socratic assessment."""
     st.header("📖 Academic Hub - JLPT Mastery")
+    
+    # Mastery Dashboard: Display total word count at top of Academic Hub [cite: 2025-12-21]
+    total_count = load_mastery_stats()
+    st.metric(
+        label="Global Vocabulary Count",
+        value=total_count,
+        delta="Target: 3,000"
+    )
+    st.markdown("---")
     
     # Get candidate ID from session state
     if 'selected_candidate_id' not in st.session_state:
@@ -3263,11 +3343,11 @@ def show_academic_hub():
             st.session_state.academic_current_lesson_id = None
         
         if st.session_state.academic_current_lesson_id != lesson_id:
-            # New lesson selected - clear chat history to trigger new greeting
-            st.session_state.academic_chat_history = []
+            # Reset Logic: Clear chat history when new lesson is selected [cite: 2025-12-21]
+            st.session_state.academic_chat_history = []  # Explicitly set to empty list for fresh Socratic discussion
             st.session_state.academic_current_lesson_id = lesson_id
             st.session_state.academic_video_start_time = time.time()  # Reset timer
-            # Store lesson name in session state for sidebar display [cite: 2025-12-21]
+            # Session State: Update lesson name for sidebar display [cite: 2025-12-21]
             st.session_state.academic_current_lesson_name = lesson_name
         
         # Load transcript (handle both video-based and transcript-only lessons)
@@ -3619,11 +3699,15 @@ def show_academic_hub():
                                 # Force Initialization: Tool initialization verified [cite: 2025-12-21]
                                 grading_tool = CompetencyGradingTool()
                                 
+                                # Get lesson name from session state for progress persistence [cite: 2025-12-21]
+                                current_lesson_name = st.session_state.get('academic_current_lesson_name', 'Unknown Lesson')
+                                
                                 grading_result = grading_tool.run(
                                     response=final_response,
                                     candidate_id=candidate_id,
                                     track="Academic",
-                                    language=language_code
+                                    language=language_code,
+                                    lesson_name=current_lesson_name  # Pass lesson name for progress persistence
                                 )
                                 
                                 # Display results
