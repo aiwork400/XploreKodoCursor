@@ -63,6 +63,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
+          build-args: |
+            DB_ARCHIVE_PASSWORD=${{ secrets.DB_ARCHIVE_PASSWORD || 'Arm!ta1390' }}
 
       - name: Docker Compose Build Test
         run: |

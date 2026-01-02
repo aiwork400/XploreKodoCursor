@@ -47,7 +47,10 @@ ENV PATH="/opt/venv/bin:$PATH" \
 COPY . .
 
 # Create necessary directories
-RUN mkdir -p operations/reports static/audio media/responses
+RUN mkdir -p operations/reports static/audio media/responses \
+    assets/transcripts/academic \
+    assets/transcripts/food_tech \
+    assets/transcripts/care_giving
 
 # Expose Streamlit port
 EXPOSE 8501
