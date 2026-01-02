@@ -2079,6 +2079,23 @@ def show_progress_dashboard():
     # Data Source: Load mastery stats from user_progress.json [cite: 2025-12-21]
     total_word_count, lesson_history = load_mastery_stats()
     
+    # Cross-Hub Progress Update: Calculate category-specific word counts [cite: 2025-12-21]
+    academic_word_count = sum(
+        entry.get("scores", {}).get("word_count", 0) 
+        for entry in lesson_history 
+        if entry.get("category", "Academic") == "Academic"
+    )
+    food_tech_word_count = sum(
+        entry.get("scores", {}).get("word_count", 0) 
+        for entry in lesson_history 
+        if entry.get("category") == "Food/Tech"
+    )
+    caregiving_word_count = sum(
+        entry.get("scores", {}).get("word_count", 0) 
+        for entry in lesson_history 
+        if entry.get("category") == "Care-giving"
+    )
+    
     # Milestone Celebration: Check if word count increased since last session [cite: 2025-12-21]
     if 'last_word_count' not in st.session_state:
         st.session_state.last_word_count = 0
@@ -2087,7 +2104,24 @@ def show_progress_dashboard():
         st.balloons()  # Milestone Celebration: Trigger balloons for 2026 progress [cite: 2025-12-21]
         st.session_state.last_word_count = total_word_count
     
-    # Visual Progress Bar: Display large progress bar at top [cite: 2025-12-21]
+    # Visual Progress Bar: Display category-specific progress bars [cite: 2025-12-21]
+    st.subheader("📊 Category-Specific Progress")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        academic_progress = min(academic_word_count / 3000.0, 1.0)
+        st.progress(academic_progress)
+        st.caption(f"📖 Academic: {academic_word_count} / 3,000 words")
+    with col2:
+        food_tech_progress = min(food_tech_word_count / 3000.0, 1.0)
+        st.progress(food_tech_progress)
+        st.caption(f"🍜 Food/Tech: {food_tech_word_count} / 3,000 words")
+    with col3:
+        caregiving_progress = min(caregiving_word_count / 3000.0, 1.0)
+        st.progress(caregiving_progress)
+        st.caption(f"🏥 Care-giving: {caregiving_word_count} / 3,000 words")
+    
+    # Overall progress bar
+    st.markdown("---")
     progress_value = min(total_word_count / 3000.0, 1.0)  # Calculation: min(total_word_count / 3000, 1.0) [cite: 2025-12-21]
     st.progress(progress_value)
     
@@ -2099,17 +2133,19 @@ def show_progress_dashboard():
         st.markdown("---")
         st.subheader("📚 Activity Log")
         
-        # Prepare dataframe with Timestamp, Lesson Name, and Accuracy Score [cite: 2025-12-21]
+        # Cross-Hub Progress Update: Filter by category and include Category column [cite: 2025-12-21]
         activity_data = []
         for entry in lesson_history:
             timestamp = entry.get("timestamp", "N/A")
             lesson_name = entry.get("lesson", "Unknown Lesson")
             scores = entry.get("scores", {})
             accuracy_score = scores.get("grade", "N/A")  # Grade is the accuracy score (1-10)
+            category = entry.get("category", "Academic")  # Category Tagging: Get category from entry [cite: 2025-12-21]
             
             activity_data.append({
                 "Timestamp": timestamp,
                 "Lesson Name": lesson_name,
+                "Category": category,  # Cross-Hub Progress Update: Add Category column [cite: 2025-12-21]
                 "Accuracy Score": accuracy_score
             })
         
@@ -4123,6 +4159,404 @@ def show_academic_hub():
                                 if config.DEBUG:
                                     with st.expander("Debug Info"):
                                         st.code(traceback.format_exc())
+
+
+def load_transcripts_from_directory(transcript_dir: Path) -> list[dict]:
+    """
+    Hub Content Activation: Load transcript files from a directory [cite: 2025-12-21]
+    
+    Args:
+        transcript_dir: Path to directory containing transcript files
+        
+    Returns:
+        List of lesson dictionaries with transcript paths
+    """
+    lessons = []
+    if not transcript_dir.exists():
+        return lessons
+    
+    # Find all .txt files in the directory
+    transcript_files = sorted(transcript_dir.glob("*.txt"))
+    
+    for idx, transcript_file in enumerate(transcript_files, 1):
+        lesson_name = transcript_file.stem.replace("_", " ").title()
+        lessons.append({
+            'id': f"transcript_{idx}",
+            'lesson_title': lesson_name,
+            'lesson_number': idx,
+            'transcript_path': str(transcript_file),
+            'source': 'transcript_file'
+        })
+    
+    return lessons
+
+
+def show_food_tech_hub():
+    """
+    Hub Content Activation: Food/Tech Hub fully wired with Socratic Sensei [cite: 2025-12-20, 2025-12-21]
+    Uses same Socratic logic as Academic Hub but restricted to assets/transcripts/food_tech/
+    """
+    st.header("🍜 Food/Tech Hub - HACCP Mastery")
+    st.markdown('<h1 class="main-header">🍜 Xplora Kodo: Japan and Beyond - Food/Tech Hub</h1>', unsafe_allow_html=True)
+    
+    # Metric Isolation: Display Current Session Vocabulary [cite: 2025-12-21]
+    session_total_words = st.session_state.get('food_tech_session_total_words', 0)
+    st.metric(
+        label="Current Session Vocabulary",
+        value=session_total_words,
+        delta="Target: 3,000"
+    )
+    st.markdown("---")
+    
+    # Get candidate ID from session state
+    if 'selected_candidate_id' not in st.session_state:
+        st.error("No candidate selected. Please select a candidate from the 'Candidate View'.")
+        st.session_state.selected_candidate_id = "CANDIDATE_001"
+        st.info("Using placeholder candidate ID: CANDIDATE_001")
+    
+    candidate_id = st.session_state.selected_candidate_id
+    
+    # Initialize session if needed
+    if 'food_tech_session_id' not in st.session_state:
+        from uuid import uuid4
+        st.session_state.food_tech_session_id = str(uuid4())
+        st.session_state.food_tech_session_total_words = 0
+        st.session_state.food_tech_chat_history = []
+    
+    session_id = st.session_state.food_tech_session_id
+    
+    # Load transcripts from food_tech directory [cite: 2025-12-21]
+    transcript_dir = Path(__file__).parent.parent / "assets" / "transcripts" / "food_tech"
+    lessons = load_transcripts_from_directory(transcript_dir)
+    
+    if not lessons:
+        st.info("🍜 No transcripts found in assets/transcripts/food_tech/. Please add transcript files to get started.")
+        return
+    
+    # Lesson Selection
+    st.subheader("📹 Select Lesson")
+    lesson_titles = [f"{lesson.get('lesson_number', i+1)}. {lesson.get('lesson_title', 'Untitled')}" for i, lesson in enumerate(lessons)]
+    
+    selected_lesson_idx = st.selectbox(
+        "Choose a lesson:",
+        options=range(len(lesson_titles)),
+        format_func=lambda x: lesson_titles[x],
+        key="food_tech_lesson_select",
+        index=None,
+        placeholder="Select a lesson..."
+    )
+    
+    if selected_lesson_idx is not None:
+        selected_lesson = lessons[selected_lesson_idx]
+        lesson_name = f"{selected_lesson.get('lesson_number', selected_lesson_idx + 1)}. {selected_lesson.get('lesson_title', 'Untitled Lesson')}"
+        transcript_path = Path(selected_lesson.get('transcript_path'))
+        
+        # Load transcript
+        if transcript_path.exists():
+            try:
+                current_lesson_transcript = transcript_path.read_text(encoding='utf-8').strip()
+                st.session_state.food_tech_current_lesson_transcript = current_lesson_transcript
+                st.session_state.food_tech_current_lesson_name = lesson_name
+            except Exception as e:
+                st.error(f"Error loading transcript: {e}")
+                return
+        else:
+            st.error("Transcript file not found.")
+            return
+        
+        # Sidebar with Sensei chat
+        with st.sidebar:
+            st.header("🍜 Food/Tech Hub Controls")
+            st.subheader("🎓 HACCP Sensei")
+            
+            # Chat interface (simplified version of Academic Hub)
+            if st.session_state.food_tech_chat_history:
+                for message in st.session_state.food_tech_chat_history:
+                    if message['role'] == 'sensei':
+                        with st.chat_message("assistant"):
+                            st.markdown(message['content'])
+                    elif message['role'] == 'user':
+                        with st.chat_message("user"):
+                            st.write(message['content'])
+            
+            # Start discussion button
+            if len(st.session_state.food_tech_chat_history) == 0:
+                if st.button("💬 Start Socratic Discussion", key="start_food_tech_discussion", type="primary", use_container_width=True):
+                    initial_greeting_prompt = f"""Greeting: English first, then Japanese, then Nepali. Then ask one question about "{lesson_name}".
+
+**Lesson Transcript:**
+{current_lesson_transcript}
+
+**Your Response (trilingual greeting + one Socratic question):**
+"""
+                    with st.spinner("🎓 Sensei is preparing your first question..."):
+                        initial_greeting = get_sensei_response(
+                            user_input=initial_greeting_prompt,
+                            conversation_history=[],
+                            transcript=current_lesson_transcript,
+                            timer_elapsed=0,
+                            track="Food/Tech",  # Category Tagging: Food/Tech track [cite: 2025-12-21]
+                            current_page="🍜 Food/Tech Hub"
+                        )
+                        st.session_state.food_tech_chat_history.append({
+                            'role': 'sensei',
+                            'content': initial_greeting
+                        })
+                        st.rerun()
+            
+            # Chat input
+            user_message = st.chat_input("Type your message to HACCP Sensei...")
+            if user_message:
+                st.session_state.food_tech_chat_history.append({
+                    'role': 'user',
+                    'content': user_message
+                })
+                sensei_response = get_sensei_response(
+                    user_input=user_message,
+                    conversation_history=st.session_state.food_tech_chat_history,
+                    transcript=current_lesson_transcript,
+                    timer_elapsed=0,
+                    track="Food/Tech",
+                    current_page="🍜 Food/Tech Hub"
+                )
+                st.session_state.food_tech_chat_history.append({
+                    'role': 'sensei',
+                    'content': sensei_response
+                })
+                st.rerun()
+        
+        # Main content: Display transcript
+        st.subheader(f"📄 {lesson_name}")
+        with st.expander("📋 View Transcript", expanded=True):
+            st.markdown(current_lesson_transcript)
+        
+        # Final Competency Submission (mirroring Academic Hub)
+        st.markdown("---")
+        with st.expander("📝 Final Competency Submission", expanded=False):
+            st.markdown("**Submit your final response for competency assessment:**")
+            
+            if 'food_tech_competency_response' not in st.session_state:
+                st.session_state.food_tech_competency_response = ""
+            
+            final_response = st.text_area(
+                "Your final competency response:",
+                value=st.session_state.food_tech_competency_response,
+                key="food_tech_final_response",
+                height=300
+            )
+            
+            word_count = len(final_response.split()) if final_response else 0
+            st.caption(f"Word count: {word_count} / 3,000")
+            
+            if st.button("🚀 Submit to Sensei", key="food_tech_submit", type="primary"):
+                if final_response:
+                    try:
+                        from agency.training_agent.competency_grading_tool import CompetencyGradingTool
+                        grading_tool = CompetencyGradingTool()
+                        
+                        grading_result = grading_tool.run(
+                            response=final_response,
+                            candidate_id=candidate_id,
+                            track="Food/Tech",  # Category Tagging: Food/Tech [cite: 2025-12-21]
+                            language="en",
+                            lesson_name=lesson_name,
+                            session_id=session_id
+                        )
+                        
+                        # Update session_total_words
+                        if isinstance(grading_result, dict):
+                            question_word_count = grading_result.get('question_word_count', 0)
+                            st.session_state.food_tech_session_total_words = st.session_state.get('food_tech_session_total_words', 0) + question_word_count
+                        
+                        st.success("✅ Assessment Complete!")
+                        if isinstance(grading_result, dict):
+                            st.metric("Overall Grade", f"{grading_result.get('grade', 'N/A')}/10")
+                    except Exception as e:
+                        st.error(f"Error during grading: {str(e)}")
+
+
+def show_caregiving_hub():
+    """
+    Hub Content Activation: Care-giving Hub fully wired with Socratic Sensei [cite: 2025-12-20, 2025-12-21]
+    Uses same Socratic logic as Academic Hub but restricted to assets/transcripts/care_giving/
+    """
+    st.header("🏥 Care-giving Hub - Kaigo Mastery")
+    st.markdown('<h1 class="main-header">🏥 Xplora Kodo: Japan and Beyond - Care-giving Hub</h1>', unsafe_allow_html=True)
+    
+    # Metric Isolation: Display Current Session Vocabulary [cite: 2025-12-21]
+    session_total_words = st.session_state.get('caregiving_session_total_words', 0)
+    st.metric(
+        label="Current Session Vocabulary",
+        value=session_total_words,
+        delta="Target: 3,000"
+    )
+    st.markdown("---")
+    
+    # Get candidate ID from session state
+    if 'selected_candidate_id' not in st.session_state:
+        st.error("No candidate selected. Please select a candidate from the 'Candidate View'.")
+        st.session_state.selected_candidate_id = "CANDIDATE_001"
+        st.info("Using placeholder candidate ID: CANDIDATE_001")
+    
+    candidate_id = st.session_state.selected_candidate_id
+    
+    # Initialize session if needed
+    if 'caregiving_session_id' not in st.session_state:
+        from uuid import uuid4
+        st.session_state.caregiving_session_id = str(uuid4())
+        st.session_state.caregiving_session_total_words = 0
+        st.session_state.caregiving_chat_history = []
+    
+    session_id = st.session_state.caregiving_session_id
+    
+    # Load transcripts from care_giving directory [cite: 2025-12-21]
+    transcript_dir = Path(__file__).parent.parent / "assets" / "transcripts" / "care_giving"
+    lessons = load_transcripts_from_directory(transcript_dir)
+    
+    if not lessons:
+        st.info("🏥 No transcripts found in assets/transcripts/care_giving/. Please add transcript files to get started.")
+        return
+    
+    # Lesson Selection
+    st.subheader("📹 Select Lesson")
+    lesson_titles = [f"{lesson.get('lesson_number', i+1)}. {lesson.get('lesson_title', 'Untitled')}" for i, lesson in enumerate(lessons)]
+    
+    selected_lesson_idx = st.selectbox(
+        "Choose a lesson:",
+        options=range(len(lesson_titles)),
+        format_func=lambda x: lesson_titles[x],
+        key="caregiving_lesson_select",
+        index=None,
+        placeholder="Select a lesson..."
+    )
+    
+    if selected_lesson_idx is not None:
+        selected_lesson = lessons[selected_lesson_idx]
+        lesson_name = f"{selected_lesson.get('lesson_number', selected_lesson_idx + 1)}. {selected_lesson.get('lesson_title', 'Untitled Lesson')}"
+        transcript_path = Path(selected_lesson.get('transcript_path'))
+        
+        # Load transcript
+        if transcript_path.exists():
+            try:
+                current_lesson_transcript = transcript_path.read_text(encoding='utf-8').strip()
+                st.session_state.caregiving_current_lesson_transcript = current_lesson_transcript
+                st.session_state.caregiving_current_lesson_name = lesson_name
+            except Exception as e:
+                st.error(f"Error loading transcript: {e}")
+                return
+        else:
+            st.error("Transcript file not found.")
+            return
+        
+        # Sidebar with Sensei chat
+        with st.sidebar:
+            st.header("🏥 Care-giving Hub Controls")
+            st.subheader("🎓 Kaigo Sensei")
+            
+            # Chat interface (simplified version of Academic Hub)
+            if st.session_state.caregiving_chat_history:
+                for message in st.session_state.caregiving_chat_history:
+                    if message['role'] == 'sensei':
+                        with st.chat_message("assistant"):
+                            st.markdown(message['content'])
+                    elif message['role'] == 'user':
+                        with st.chat_message("user"):
+                            st.write(message['content'])
+            
+            # Start discussion button
+            if len(st.session_state.caregiving_chat_history) == 0:
+                if st.button("💬 Start Socratic Discussion", key="start_caregiving_discussion", type="primary", use_container_width=True):
+                    initial_greeting_prompt = f"""Greeting: English first, then Japanese, then Nepali. Then ask one question about "{lesson_name}".
+
+**Lesson Transcript:**
+{current_lesson_transcript}
+
+**Your Response (trilingual greeting + one Socratic question):**
+"""
+                    with st.spinner("🎓 Sensei is preparing your first question..."):
+                        initial_greeting = get_sensei_response(
+                            user_input=initial_greeting_prompt,
+                            conversation_history=[],
+                            transcript=current_lesson_transcript,
+                            timer_elapsed=0,
+                            track="Care-giving",  # Category Tagging: Care-giving track [cite: 2025-12-21]
+                            current_page="🏥 Care-giving Hub"
+                        )
+                        st.session_state.caregiving_chat_history.append({
+                            'role': 'sensei',
+                            'content': initial_greeting
+                        })
+                        st.rerun()
+            
+            # Chat input
+            user_message = st.chat_input("Type your message to Kaigo Sensei...")
+            if user_message:
+                st.session_state.caregiving_chat_history.append({
+                    'role': 'user',
+                    'content': user_message
+                })
+                sensei_response = get_sensei_response(
+                    user_input=user_message,
+                    conversation_history=st.session_state.caregiving_chat_history,
+                    transcript=current_lesson_transcript,
+                    timer_elapsed=0,
+                    track="Care-giving",
+                    current_page="🏥 Care-giving Hub"
+                )
+                st.session_state.caregiving_chat_history.append({
+                    'role': 'sensei',
+                    'content': sensei_response
+                })
+                st.rerun()
+        
+        # Main content: Display transcript
+        st.subheader(f"📄 {lesson_name}")
+        with st.expander("📋 View Transcript", expanded=True):
+            st.markdown(current_lesson_transcript)
+        
+        # Final Competency Submission (mirroring Academic Hub)
+        st.markdown("---")
+        with st.expander("📝 Final Competency Submission", expanded=False):
+            st.markdown("**Submit your final response for competency assessment:**")
+            
+            if 'caregiving_competency_response' not in st.session_state:
+                st.session_state.caregiving_competency_response = ""
+            
+            final_response = st.text_area(
+                "Your final competency response:",
+                value=st.session_state.caregiving_competency_response,
+                key="caregiving_final_response",
+                height=300
+            )
+            
+            word_count = len(final_response.split()) if final_response else 0
+            st.caption(f"Word count: {word_count} / 3,000")
+            
+            if st.button("🚀 Submit to Sensei", key="caregiving_submit", type="primary"):
+                if final_response:
+                    try:
+                        from agency.training_agent.competency_grading_tool import CompetencyGradingTool
+                        grading_tool = CompetencyGradingTool()
+                        
+                        grading_result = grading_tool.run(
+                            response=final_response,
+                            candidate_id=candidate_id,
+                            track="Care-giving",  # Category Tagging: Care-giving [cite: 2025-12-21]
+                            language="en",
+                            lesson_name=lesson_name,
+                            session_id=session_id
+                        )
+                        
+                        # Update session_total_words
+                        if isinstance(grading_result, dict):
+                            question_word_count = grading_result.get('question_word_count', 0)
+                            st.session_state.caregiving_session_total_words = st.session_state.get('caregiving_session_total_words', 0) + question_word_count
+                        
+                        st.success("✅ Assessment Complete!")
+                        if isinstance(grading_result, dict):
+                            st.metric("Overall Grade", f"{grading_result.get('grade', 'N/A')}/10")
+                    except Exception as e:
+                        st.error(f"Error during grading: {str(e)}")
 
 
 def show_live_simulator():
