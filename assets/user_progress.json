@@ -1,5 +1,5 @@
 {
-    "total_word_count": 75,
+    "total_word_count": 88,
     "lesson_history": [
         {
             "timestamp": "2026-01-01T17:21:56.832071",
@@ -49,6 +49,26 @@
                 "word_count": 10,
                 "accuracy_feedback": "The statement's accuracy depends on the context. More information would be needed to fully assess its truthfulness. What 'they' refers to is unclear.",
                 "grammar_feedback": "The grammar is technically correct, but the semicolon is slightly unconventional in such a short sentence. A comma or simply separating it into two sentences would be more common and perhaps clearer. Using 'Yes, they are...' is better."
+            }
+        },
+        {
+            "timestamp": "2026-01-02T10:47:38.997215",
+            "lesson": "3. N5 Kitchen Safety & Hygiene",
+            "scores": {
+                "grade": 1,
+                "word_count": 3,
+                "accuracy_feedback": "The response 'Once a day' does not demonstrate any understanding of the provided guidelines on kitchen safety, hygiene standards, equipment safety, or food handling. There is no apparent connection to washing hands, food storage, uniform cleanliness, equipment training, FIFO principles, or any other concept from the study material.",
+                "grammar_feedback": "The grammar is correct, but the response is irrelevant to the task."
+            }
+        },
+        {
+            "timestamp": "2026-01-02T11:44:44.525076",
+            "lesson": "3. N5 Kitchen Safety & Hygiene",
+            "scores": {
+                "grade": 4,
+                "word_count": 10,
+                "accuracy_feedback": "The response suggests an understanding that raw material quality is important, which indirectly relates to several points in the guidelines, such as 'FIFO', 'Check expiration dates', and 'Prevent cross-contamination'. However, it doesn't explicitly demonstrate comprehension of the listed safety guidelines. A better response would directly reference or elaborate on the provided points in relation to raw materials.",
+                "grammar_feedback": "The sentence is grammatically incomplete and uses 'may be' instead of 'maybe'. It lacks clarity and could be phrased more precisely, for example, 'Raw material quality is also important because...'"
             }
         }
     ]

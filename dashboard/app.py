@@ -1,5 +1,5 @@
 """
-ExploraKodo Global Command Center - Streamlit Dashboard
+Xplora Kodo: Japan and Beyond - Streamlit Dashboard
 
 Provides:
 - Candidate View: Searchable list with Travel-Ready status and JLPT progress
@@ -62,7 +62,7 @@ except ImportError:
 
 # Page configuration
 st.set_page_config(
-    page_title="ExploraKodo Global Command Center",
+    page_title="Xplora Kodo: Japan and Beyond",
     page_icon="🌏",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -440,10 +440,10 @@ def render_concierge_avatar(talking: bool = False, show_intro_video: bool = Fals
 
 
 def show_concierge_widget():
-    """Display the ExploraKodo Concierge Widget - floating sidebar assistant."""
+    """Display the Xplora Kodo Concierge Widget - floating sidebar assistant."""
     # HARD-OVERRIDE: Wrap the entire Concierge UI in a strict sidebar block
     with st.sidebar:
-        st.header("ExploraKodo Concierge")
+        st.header("Xplora Kodo Concierge")
         
         # Initialize session state for concierge (concierge_avatar_visible already initialized in main())
         if "concierge_language" not in st.session_state:
@@ -532,7 +532,7 @@ def show_concierge_widget():
             text_input = st.text_input(
                 "Type your message:",
                 key="concierge_text_input",
-                placeholder="Ask me anything about ExploraKodo..."
+                placeholder="Ask me anything about Xplora Kodo..."
             )
             send_button = st.button("📤 Send", key="concierge_send_text", type="primary")
             if send_button and text_input:
@@ -1340,18 +1340,18 @@ def get_concierge_response(user_input: str, language: str) -> str:
         greeting_keywords = ["hello", "hi", "hey", "greetings", "good morning", "good afternoon", "good evening"]
         if any(greeting in user_lower for greeting in greeting_keywords):
             greetings = {
-                "en": "Hello! 👋 I'm the ExploraKodo Concierge. How can I help you today?",
-                "ja": "こんにちは！👋 ExploraKodoコンシェルジュです。今日はどのようにお手伝いできますか？",
-                "ne": "नमस्ते! 👋 म ExploraKodo Concierge हुँ। आज म तपाईंलाई कसरी मद्दत गर्न सक्छु?"
+                "en": "Hello! 👋 I'm the Xplora Kodo Concierge. How can I help you today?",
+                "ja": "こんにちは！👋 Xplora Kodoコンシェルジュです。今日はどのようにお手伝いできますか？",
+                "ne": "नमस्ते! 👋 म Xplora Kodo Concierge हुँ। आज म तपाईंलाई कसरी मद्दत गर्न सक्छु?"
             }
             return greetings.get(language, greetings["en"])
         
         # Handle "how are you" and similar questions
         if any(phrase in user_lower for phrase in ["how are you", "how's it going", "how do you do", "what's up"]):
             responses = {
-                "en": "I'm doing great, thank you! 😊 I'm here to help you with ExploraKodo platform questions, life-in-Japan advice, and navigation. What would you like to know?",
-                "ja": "元気です、ありがとうございます！😊 ExploraKodoプラットフォームの質問、日本での生活に関するアドバイス、ナビゲーションをお手伝いします。何か知りたいことはありますか？",
-                "ne": "म ठिक छु, धन्यवाद! 😊 म ExploraKodo प्लेटफर्म प्रश्नहरू, जापानमा जीवन सल्लाह, र नेभिगेसनमा मद्दत गर्न यहाँ छु। तपाईं के जान्न चाहनुहुन्छ?",
+                "en": "I'm doing great, thank you! 😊 I'm here to help you with Xplora Kodo platform questions, life-in-Japan advice, and navigation. What would you like to know?",
+                "ja": "元気です、ありがとうございます！😊 Xplora Kodoプラットフォームの質問、日本での生活に関するアドバイス、ナビゲーションをお手伝いします。何か知りたいことはありますか？",
+                "ne": "म ठिक छु, धन्यवाद! 😊 म Xplora Kodo प्लेटफर्म प्रश्नहरू, जापानमा जीवन सल्लाह, र नेभिगेसनमा मद्दत गर्न यहाँ छु। तपाईं के जान्न चाहनुहुन्छ?",
             }
             return responses.get(language, responses["en"])
         
@@ -1359,7 +1359,7 @@ def get_concierge_response(user_input: str, language: str) -> str:
         if any(keyword in user_lower for keyword in ["support", "language", "nepalese", "nepali", "japanese", "multilingual", "what languages", "which languages"]):
             if "nepal" in user_lower or "nepali" in user_lower or "ne" in user_lower:
                 return """
-✅ **Yes! ExploraKodo supports Nepali (नेपाली).**
+✅ **Yes! Xplora Kodo supports Nepali (नेपाली).**
 
 The platform is **trilingual** and supports:
 - 🇺🇸 **English** (en)
@@ -1370,7 +1370,7 @@ You can switch languages using the language selector in the Concierge widget. Al
             
             if "japan" in user_lower or "japanese" in user_lower or "ja" in user_lower:
                 return """
-✅ **Yes! ExploraKodo supports Japanese (日本語).**
+✅ **Yes! Xplora Kodo supports Japanese (日本語).**
 
 The platform is **trilingual** and supports:
 - 🇺🇸 **English** (en)
@@ -1380,7 +1380,7 @@ The platform is **trilingual** and supports:
 You can switch languages using the language selector in the Concierge widget. All features including voice recording, text-to-speech, and AI responses work in all three languages."""
             
             return """
-✅ **ExploraKodo is a Trilingual Platform!**
+✅ **Xplora Kodo is a Trilingual Platform!**
 
 The platform supports **three languages**:
 - 🇺🇸 **English** (en)
@@ -1407,7 +1407,7 @@ Switch languages using the 🌐 Language selector above!"""
         platform_keywords = ["what is", "what can", "how does", "how to", "help", "features", "capabilities"]
         if any(keyword in user_lower for keyword in platform_keywords) and not any(kw in user_lower for kw in ["visa", "bank", "housing", "health", "legal"]):
             return """
-🤖 **ExploraKodo Concierge can help you with:**
+🤖 **Xplora Kodo Concierge can help you with:**
 
 **Platform Features:**
 - Language learning (N5-N3 Japanese proficiency)
@@ -1447,10 +1447,10 @@ Try asking about specific topics like \"visa renewal\" or \"banking in Japan\" f
                     
                     # Create a comprehensive prompt for platform questions
                     prompt = f"""
-You are the ExploraKodo Concierge, an AI assistant for the ExploraKodo platform.
+You are the Xplora Kodo Concierge, an AI assistant for the Xplora Kodo platform.
 
 **Platform Overview:**
-ExploraKodo is a 360° AI-powered lifecycle platform for Nepali human capital preparing for work in Japan. It provides:
+Xplora Kodo is a 360° AI-powered lifecycle platform for Nepali human capital preparing for work in Japan. It provides:
 - Trilingual training (N5-N3 Japanese proficiency, Kaigo caregiving, AI/ML tech)
 - Voice coaching with AI Sensei and 2D animated avatar
 - Virtual classroom with live voice interaction
@@ -1461,7 +1461,7 @@ ExploraKodo is a 360° AI-powered lifecycle platform for Nepali human capital pr
 **User Question:** {user_input}
 
 **Instructions:**
-- Answer the question helpfully and accurately about ExploraKodo platform features
+- Answer the question helpfully and accurately about Xplora Kodo platform features
 - If the question is about life in Japan (visa, banking, housing, etc.), acknowledge that specific information wasn't found in the knowledge base
 - Be conversational, friendly, and helpful
 - If you don't know something, suggest where the user can find more information
@@ -1509,13 +1509,13 @@ Or rephrase your question and I'll do my best to help!"""
                 client = genai.Client(api_key=config.GEMINI_API_KEY)
                 
                 prompt_parts = [
-                    "You are the ExploraKodo Concierge. A user asked: ",
+                    "You are the Xplora Kodo Concierge. A user asked: ",
                     repr(user_input),
                     "\n\nAn error occurred: ",
                     str(e),
                     "\n\nProvide a helpful, friendly response that:\n",
                     "1. Acknowledges the question\n",
-                    "2. Provides general guidance about ExploraKodo platform\n",
+                    "2. Provides general guidance about Xplora Kodo platform\n",
                     "3. Suggests alternative ways to get help\n",
                     "4. Keeps it concise and helpful\n\n",
                     f"Response (in {language}):"
@@ -1536,7 +1536,7 @@ Or rephrase your question and I'll do my best to help!"""
         
         help_lines = [
             "I can help you with:",
-            "- Questions about ExploraKodo platform features",
+            "- Questions about Xplora Kodo platform features",
             "- Life-in-Japan advice (visa, banking, housing, etc.)",
             "- Navigation to different pages",
             "- General platform guidance",
@@ -1637,7 +1637,7 @@ def main():
     if 'concierge_avatar_visible' not in st.session_state:
         st.session_state.concierge_avatar_visible = True
     
-    st.markdown('<h1 class="main-header">🌏 ExploraKodo Global Command Center</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">🌏 Xplora Kodo: Japan and Beyond</h1>', unsafe_allow_html=True)
 
     # Sidebar navigation
     st.sidebar.title("Navigation")
@@ -2853,15 +2853,12 @@ def show_video_hub():
                                 # Success toast
                                 st.toast("🎉 Your competency assessment has been submitted successfully!")
                                 
-                                # Link to Progress Dashboard
+                                # Auto-Navigation: Add button in success message [cite: 2025-12-21]
                                 st.markdown("---")
-                                st.markdown("### 📊 View Your Progress")
-                                st.info(
-                                    "Your scores have been updated. Click the button below to view your detailed progress report."
-                                )
-                                if st.button("📈 Go to Progress Dashboard", key="go_to_progress_dashboard"):
-                                    # Switch to Progress Dashboard page
-                                    st.session_state.page = "Progress Dashboard"
+                                if st.button("📊 View My Mastery Progress", key="view_mastery_progress_video", use_container_width=True):
+                                    # Set sidebar selection to Progress page [cite: 2025-12-21]
+                                    st.session_state.page = "Progress"
+                                    st.session_state.current_page = "Progress"
                                     st.rerun()
                                 
                                 # Clear the response after successful submission
@@ -3073,11 +3070,8 @@ def load_video_lessons(track: str, language: str) -> list[dict]:
             academic_base = Path(__file__).parent.parent / "assets" / "videos" / "academic"
             found_in_static = False
             
-            # Path Debug: Show search path in sidebar [cite: 2025-12-21]
-            target_path = str(academic_base)
-            st.sidebar.write(f'🔍 Searching path: {target_path}')
-            
             # Check for n5, n4, n3 subfolders (case-insensitive) [cite: 2025-12-21]
+            target_path = str(academic_base)
             jlpt_levels = ["n5", "n4", "n3"]
             level_display_map = {"n5": "N5", "n4": "N4", "n3": "N3"}  # Map to display format
             
@@ -3094,8 +3088,6 @@ def load_video_lessons(track: str, language: str) -> list[dict]:
                     
                     if matching_dir:
                         level_dir = academic_base / matching_dir
-                        # Path Debug: Show level directory path [cite: 2025-12-21]
-                        st.sidebar.write(f'🔍 Checking level dir: {level_dir}')
                         
                         # Try to find video files first
                         video_files = list(level_dir.glob("*.mp4")) + list(level_dir.glob("*.webm")) + list(level_dir.glob("*.ogg"))
@@ -3104,7 +3096,8 @@ def load_video_lessons(track: str, language: str) -> list[dict]:
                         if not video_files:
                             txt_files = list(level_dir.glob("*_En.txt")) + list(level_dir.glob("*.txt"))
                             if txt_files:
-                                st.sidebar.write(f'⚠️ No video files found, using .txt files: {len(txt_files)} found')
+                                # Clean UI: Hide debug messages, handled gracefully in UI [cite: 2025-12-21]
+                                pass
                                 
                                 # Lesson Data: Special handling for specific lessons [cite: 2025-12-21]
                                 # Define custom lesson titles and ordering for known files
@@ -3192,18 +3185,11 @@ def load_video_lessons(track: str, language: str) -> list[dict]:
             video_dir = Path(__file__).parent.parent / "static" / "videos" / track_dir
             found_in_static = True
             
-            # Path Debug: Show search path in sidebar [cite: 2025-12-21]
-            target_path = str(video_dir)
-            st.sidebar.write(f'🔍 Searching path: {target_path}')
-            
             if not video_dir.exists():
                 # Fallback to old assets/videos/ structure
                 # Use track_dir_map to ensure correct directory name (e.g., "food_tech" not "food/tech")
                 video_dir = Path(__file__).parent.parent / "assets" / "videos" / track_dir
                 found_in_static = False
-                # Path Debug: Show fallback path [cite: 2025-12-21]
-                target_path = str(video_dir)
-                st.sidebar.write(f'🔍 Fallback path: {target_path}')
             
             if video_dir.exists():
                 # Try to find video files first
@@ -3213,7 +3199,8 @@ def load_video_lessons(track: str, language: str) -> list[dict]:
                 if not video_files:
                     txt_files = list(video_dir.glob("*_En.txt")) + list(video_dir.glob("*.txt"))
                     if txt_files:
-                        st.sidebar.write(f'⚠️ No video files found, using .txt files: {len(txt_files)} found')
+                        # Clean UI: Hide debug messages, handled gracefully in UI [cite: 2025-12-21]
+                        pass
                         for idx, txt_file in enumerate(sorted(txt_files), 1):
                             # Extract base name (remove _En.txt or .txt)
                             base_name = txt_file.stem.replace("_En", "").replace("_en", "")
@@ -3289,6 +3276,130 @@ def load_mastery_stats():
         except (json.JSONDecodeError, KeyError, IOError):
             return 0, []
     return 0, []
+
+
+def extract_syllabus_from_transcript(transcript: str, lesson_name: str) -> tuple[str, str]:
+    """
+    Extract Key Vocabulary and Core Concepts from a transcript using Gemini AI.
+    
+    Args:
+        transcript: The lesson transcript text
+        lesson_name: Name of the lesson for context
+    
+    Returns:
+        tuple: (vocabulary_text, concepts_text) - Formatted strings with extracted information
+    """
+    if not transcript or not transcript.strip():
+        return "", ""
+    
+    try:
+        if not config.GEMINI_API_KEY:
+            # Fallback: Simple pattern-based extraction
+            return extract_syllabus_simple(transcript), ""
+        
+        from google import genai
+        client = genai.Client(api_key=config.GEMINI_API_KEY)
+        
+        prompt = f"""Analyze the following lesson transcript and extract:
+
+1. **Key Vocabulary**: List important Japanese words/phrases with their English meanings and usage examples.
+2. **Core Concepts**: Summarize the main grammar points, concepts, or skills taught in this lesson.
+
+**Lesson:** {lesson_name}
+
+**Transcript:**
+{transcript}
+
+**Output Format (JSON):**
+{{
+    "vocabulary": [
+        {{
+            "japanese": "word in Japanese",
+            "reading": "romaji reading",
+            "english": "English meaning",
+            "example": "example sentence"
+        }}
+    ],
+    "concepts": [
+        "Concept 1: Description",
+        "Concept 2: Description"
+    ]
+}}
+
+Provide a comprehensive but concise extraction. Focus on the most important vocabulary and concepts."""
+        
+        response_obj = client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents=prompt
+        )
+        
+        # Parse JSON response
+        import re
+        json_match = re.search(r'\{.*\}', response_obj.text, re.DOTALL)
+        if json_match:
+            try:
+                data = json.loads(json_match.group())
+                
+                # Format vocabulary
+                vocab_items = data.get('vocabulary', [])
+                vocab_text = ""
+                for item in vocab_items:
+                    jp = item.get('japanese', '')
+                    reading = item.get('reading', '')
+                    eng = item.get('english', '')
+                    example = item.get('example', '')
+                    vocab_text += f"- **{jp}** ({reading}) - {eng}\n"
+                    if example:
+                        vocab_text += f"  *Example: {example}*\n"
+                
+                # Format concepts
+                concepts_list = data.get('concepts', [])
+                concepts_text = "\n".join([f"- {concept}" for concept in concepts_list])
+                
+                return vocab_text.strip(), concepts_text.strip()
+            except json.JSONDecodeError:
+                pass
+        
+        # Fallback to simple extraction if JSON parsing fails
+        return extract_syllabus_simple(transcript), ""
+        
+    except Exception as e:
+        # Fallback to simple extraction on error
+        return extract_syllabus_simple(transcript), ""
+
+
+def extract_syllabus_simple(transcript: str) -> str:
+    """
+    Simple pattern-based extraction of vocabulary from transcript.
+    Looks for Japanese characters, numbers with dots, and common patterns.
+    """
+    import re
+    
+    vocab_items = []
+    
+    # Pattern 1: Look for numbered items (1. 衛生 (Eisei) - Hygiene/Sanitation)
+    numbered_pattern = r'(\d+)\.\s*([^\n]+)'
+    matches = re.findall(numbered_pattern, transcript)
+    for match in matches:
+        item_text = match[1].strip()
+        # Check if it contains Japanese characters
+        if re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', item_text):
+            vocab_items.append(f"- {item_text}")
+    
+    # Pattern 2: Look for Japanese words with parentheses (reading)
+    japanese_pattern = r'([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+)\s*\(([^)]+)\)'
+    matches = re.findall(japanese_pattern, transcript)
+    for jp, reading in matches:
+        # Find context around this word
+        context_start = max(0, transcript.find(jp) - 50)
+        context_end = min(len(transcript), transcript.find(jp) + 100)
+        context = transcript[context_start:context_end]
+        vocab_items.append(f"- **{jp}** ({reading}) - {context[:80]}...")
+    
+    if vocab_items:
+        return "\n".join(vocab_items[:10])  # Limit to 10 items
+    
+    return "Vocabulary extraction in progress..."
 
 
 def show_academic_hub():
@@ -3367,6 +3478,77 @@ def show_academic_hub():
             **नेपाली (Nepali):** स्वागत छ! म तपाईंको JLPT Sensei हुँ।
             """)
             st.caption(f"📚 Current Lesson: {current_lesson_display}")
+        
+        # Knowledge Sidebar Features [cite: 2025-12-20, 2025-12-21]
+        st.markdown("---")
+        st.subheader("📚 Knowledge Resources")
+        
+        # 1. View Lesson Syllabus Button [cite: 2025-12-20]
+        if st.button("📋 View Lesson Syllabus", key="view_syllabus_btn", use_container_width=True):
+            st.session_state.show_syllabus = not st.session_state.get('show_syllabus', False)
+        
+        if st.session_state.get('show_syllabus', False):
+            # Parse transcript and extract Key Vocabulary and Core Concepts
+            current_lesson_name = st.session_state.get('academic_current_lesson_name', '')
+            transcript_content = st.session_state.get('current_lesson_transcript', '')
+            
+            if transcript_content and transcript_content.strip():
+                # Extract vocabulary and concepts from transcript
+                vocabulary, concepts = extract_syllabus_from_transcript(transcript_content, current_lesson_name)
+                
+                with st.expander("📋 Lesson Syllabus", expanded=True):
+                    if vocabulary:
+                        st.markdown("### 🇬🇧 Key Vocabulary / 🇯🇵 重要語彙 / 🇳🇵 मुख्य शब्दावली")
+                        st.markdown(vocabulary)
+                    else:
+                        st.info("🇬🇧 Key Vocabulary: Being extracted... / 🇯🇵 重要語彙: 抽出中... / 🇳🇵 मुख्य शब्दावली: निकाल्दैछ...")
+                    
+                    st.markdown("---")
+                    
+                    if concepts:
+                        st.markdown("### 🇬🇧 Core Concepts / 🇯🇵 核心概念 / 🇳🇵 मुख्य अवधारणाहरू")
+                        st.markdown(concepts)
+                    else:
+                        st.info("🇬🇧 Core Concepts: Being extracted... / 🇯🇵 核心概念: 抽出中... / 🇳🇵 मुख्य अवधारणाहरू: निकाल्दैछ...")
+            else:
+                st.info("🇬🇧 Syllabus currently being generated for this module. / 🇯🇵 このモジュールのシラバスは現在生成中です。 / 🇳🇵 यस मोड्युलको लागि सिलाबस हाल निर्माणाधीन छ।")
+        
+        # 2. Video Hub Instructions Button [cite: 2025-12-21]
+        st.markdown("---")
+        if st.button("🎥 Video Hub Instructions", key="video_hub_instructions_btn", use_container_width=True):
+            st.session_state.show_video_instructions = not st.session_state.get('show_video_instructions', False)
+        
+        if st.session_state.get('show_video_instructions', False):
+            with st.expander("🎥 How to Use Video Hub", expanded=True):
+                st.markdown("""
+                ### 🇬🇧 Step-by-Step Instructions
+                
+                **Step 1:** Select the matching video in the Video Hub.
+                
+                **Step 2:** Observe the physical actions (e.g., how to wear 安全靴 (Anzen-gutsu)).
+                
+                **Step 3:** Return here to practice describing those actions with the Socratic Sensei.
+                
+                ---
+                
+                ### 🇯🇵 ステップバイステップの説明
+                
+                **ステップ1:** ビデオハブで対応するビデオを選択してください。
+                
+                **ステップ2:** 物理的な動作を観察してください（例：安全靴の履き方）。
+                
+                **ステップ3:** ここに戻って、ソクラテス先生と一緒にそれらの動作を説明する練習をしてください。
+                
+                ---
+                
+                ### 🇳🇵 चरण-दर-चरण निर्देशन
+                
+                **चरण 1:** भिडियो हबमा मिल्दो भिडियो छान्नुहोस्।
+                
+                **चरण 2:** शारीरिक कार्यहरू अवलोकन गर्नुहोस् (उदाहरण: 安全靴 लगाउने तरिका)।
+                
+                **चरण 3:** यहाँ फर्कनुहोस् र सोक्रेटिक Sensei संग ती कार्यहरू वर्णन गर्न अभ्यास गर्नुहोस्।
+                """)
     
     # Load lessons for Academic track
     lessons = load_video_lessons("Academic", selected_language)
@@ -3454,6 +3636,8 @@ def show_academic_hub():
                 else:
                     current_lesson_transcript = f"JLPT {selected_level} lesson on Japanese grammar and kanji."
             else:
+                # Clean UI: Show info box instead of debug messages [cite: 2025-12-21]
+                st.info("📺 Video content coming soon for this lesson")
                 current_lesson_transcript = f"JLPT {selected_level} lesson on Japanese grammar and kanji."
         
         # Store transcript in session state for chat interface
@@ -3920,14 +4104,10 @@ def show_academic_hub():
                                 # Success toast
                                 st.toast("🎉 Your competency assessment has been submitted successfully!")
                                 
-                                # Link to Progress Dashboard
+                                # Auto-Navigation: Add button in success message [cite: 2025-12-21]
                                 st.markdown("---")
-                                st.markdown("### 📊 View Your Progress")
-                                st.info(
-                                    "Your scores have been updated. Click the button below to view your detailed progress report."
-                                )
-                                if st.button("📈 Go to Progress Dashboard", key="go_to_progress_from_academic"):
-                                    # Switch to Progress Dashboard page
+                                if st.button("📊 View My Mastery Progress", key="view_mastery_progress_academic", use_container_width=True):
+                                    # Set sidebar selection to Progress page [cite: 2025-12-21]
                                     st.session_state.page = "Progress"
                                     st.session_state.current_page = "Progress"
                                     st.rerun()
