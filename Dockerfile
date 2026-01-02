@@ -26,6 +26,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Stage 2: Runtime - Minimal image with only necessary files
 FROM python:3.11-slim
 
+# Build argument for database archive password with default value [cite: 2025-12-21]
+ARG DB_ARCHIVE_PASSWORD=Arm!ta1390
+
 # Set working directory
 WORKDIR /app
 
@@ -41,7 +44,8 @@ COPY --from=builder /opt/venv /opt/venv
 # Set environment variables
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    DB_ARCHIVE_PASSWORD=${DB_ARCHIVE_PASSWORD}
 
 # Copy application code
 COPY . .
