@@ -1468,6 +1468,89 @@ def transcribe_audio_with_gemini(audio_bytes: bytes) -> str:
         return f"Error transcribing audio: {str(e)}"
 
 
+def update_mastery_scores_from_grading(candidate_id: str, track: str, grading_result: dict):
+    """
+    Update mastery scores in database based on grading result.
+    Converts grade (1-10) to mastery percentage and updates appropriate skills.
+    
+    Args:
+        candidate_id: Candidate identifier
+        track: Track name (Academic, Food/Tech, Care-giving)
+        grading_result: Dictionary with grade, accuracy_feedback, grammar_feedback, etc.
+    """
+    try:
+        from database.db_manager import CurriculumProgress, SessionLocal
+        import json
+        
+        db = SessionLocal()
+        try:
+            curriculum = db.query(CurriculumProgress).filter(
+                CurriculumProgress.candidate_id == candidate_id
+            ).first()
+            
+            if not curriculum:
+                return
+            
+            # Get or initialize mastery_scores
+            mastery_scores = curriculum.mastery_scores
+            if mastery_scores is None:
+                mastery_scores = {}
+            elif isinstance(mastery_scores, str):
+                try:
+                    mastery_scores = json.loads(mastery_scores)
+                except json.JSONDecodeError:
+                    mastery_scores = {}
+            elif not isinstance(mastery_scores, dict):
+                mastery_scores = {}
+            
+            # Initialize track if needed
+            if track not in mastery_scores:
+                mastery_scores[track] = {}
+            
+            # Convert grade (1-10) to mastery percentage (0-100)
+            grade = grading_result.get('grade', 5)
+            mastery_increment = (grade / 10.0) * 10.0  # 1-10 grade -> 1-10% increment
+            
+            # Determine which skills to update based on feedback
+            affected_skills = []
+            accuracy_feedback = grading_result.get('accuracy_feedback', '').lower()
+            grammar_feedback = grading_result.get('grammar_feedback', '').lower()
+            
+            # Map feedback to skills
+            if 'vocabulary' in accuracy_feedback or 'vocabulary' in grammar_feedback:
+                affected_skills.append("Vocabulary")
+            if 'tone' in accuracy_feedback or 'honorific' in accuracy_feedback or 'tone' in grammar_feedback:
+                affected_skills.append("Tone/Honorifics")
+            if 'logic' in accuracy_feedback or 'context' in accuracy_feedback or 'logic' in grammar_feedback:
+                affected_skills.append("Contextual Logic")
+            
+            # If no specific skills identified, update all skills
+            if not affected_skills:
+                affected_skills = ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]
+            
+            # Update scores for affected skills
+            valid_skills = ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]
+            for skill in affected_skills:
+                if skill in valid_skills:
+                    current_score = float(mastery_scores[track].get(skill, 0.0))
+                    new_score = min(100.0, current_score + mastery_increment)
+                    mastery_scores[track][skill] = round(new_score, 1)
+            
+            # Save to database
+            curriculum.mastery_scores = mastery_scores
+            db.add(curriculum)
+            db.commit()
+            db.refresh(curriculum)
+            
+        finally:
+            db.close()
+            
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Error updating mastery scores from grading: {e}")
+
+
 def update_mastery_score_for_vocabulary(candidate_id: str, track: str, found_terms: list[str]):
     """
     Update mastery score for Vocabulary skill when bonus terms are used.
@@ -3851,31 +3934,7 @@ def show_academic_hub():
         with st.expander("📋 View Transcript", expanded=True):
             st.markdown(current_lesson_transcript)
         
-        # Chat interface using render_unified_chat_interface (matching Care-giving Hub gold standard) [cite: 2025-12-21]
-        st.markdown("---")
-        # Use render_unified_chat_interface to restore Start, Next, and Stop buttons [cite: 2025-12-21]
-        render_unified_chat_interface(
-            chat_history_key='academic_chat_history',
-            transcript=current_lesson_transcript,
-            lesson_name=lesson_name,
-            track="Academic",
-            current_page="📖 Academic Hub",
-            sensei_name="JLPT Sensei",
-            placeholder_text="Type your message to JLPT Sensei..."
-        )
-        
-        # Display timer and phase indicator (if video-based lesson)
-        if video_path and video_path.exists():
-            # Initialize video timestamp tracking
-            if 'academic_video_start_time' not in st.session_state:
-                st.session_state.academic_video_start_time = time.time()
-            
-            # Calculate timer_elapsed (maps to video timestamp)
-            timer_elapsed = int(time.time() - st.session_state.academic_video_start_time)
-            phase_indicator = "Evaluator" if timer_elapsed >= 180 else "Helpful Assistant"
-            st.caption(f"⏱️ Timer: {timer_elapsed}s | Phase: {phase_indicator}")
-        
-        # Mastery Score Preview (mirroring Video Hub)
+        # Mastery Score Preview (unified structure: Transcript -> Mastery Preview -> Chat Interface) [cite: 2025-12-21]
         st.markdown("---")
         st.subheader("📊 Mastery Score Preview")
         mastery_scores, _ = calculate_mastery_scores(candidate_id)
@@ -3890,9 +3949,79 @@ def show_academic_hub():
         else:
             st.info("No mastery scores yet. Start chatting with Sensei to earn points!")
         
-        # Final Competency Submission - only show after at least one chat interaction [cite: 2025-12-21]
+        # Chat interface using render_unified_chat_interface (matching Care-giving Hub gold standard) [cite: 2025-12-21]
+        st.markdown("---")
+        # Use render_unified_chat_interface to restore Start, Next, and Stop buttons [cite: 2025-12-21]
+        render_unified_chat_interface(
+            chat_history_key='academic_chat_history',
+            transcript=current_lesson_transcript,
+            lesson_name=lesson_name,
+            track="Academic",
+            current_page="📖 Academic Hub",
+            sensei_name="JLPT Sensei",
+            placeholder_text="Type your message to JLPT Sensei..."
+        )
+        
+        # Navigation Controls: Add control buttons to Academic Hub main content area [cite: 2025-12-21]
+        academic_chat_history = st.session_state.get('academic_chat_history', [])
+        if len(academic_chat_history) > 0:
+            st.markdown("---")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("➡️ Next Question", key="next_question_academic_main", use_container_width=True):
+                    # Generate follow-up question based on conversation history and transcript [cite: 2025-12-20, 2025-12-21]
+                    next_question_prompt = f"""Based on the conversation history below, generate a follow-up Socratic question that:
+1. Builds on the student's previous responses
+2. Deepens understanding of the topic from the transcript
+3. Maintains the trilingual format (English, Japanese, Nepali)
+
+**Conversation History:**
+{chr(10).join([f"{msg['role'].title()}: {msg['content']}" for msg in academic_chat_history[-4:]])}
+
+**Lesson Transcript:**
+{current_lesson_transcript}
+
+**Your Response (trilingual follow-up Socratic question):**
+"""
+                    with st.spinner("🎓 JLPT Sensei is preparing the next question..."):
+                        next_question = get_sensei_response(
+                            user_input=next_question_prompt,
+                            conversation_history=academic_chat_history,
+                            transcript=current_lesson_transcript,
+                            timer_elapsed=0,
+                            track="Academic",
+                            current_page="📖 Academic Hub"
+                        )
+                        # Append new question to chat history [cite: 2025-12-21]
+                        academic_chat_history.append({
+                            'role': 'sensei',
+                            'content': next_question
+                        })
+                        st.session_state.academic_chat_history = academic_chat_history
+                        st.rerun()
+            
+            with col2:
+                if st.button("⏹️ Stop Session", key="stop_session_academic_main", use_container_width=True):
+                    # Mark session as stopped to allow jumping to Final Competency Submission [cite: 2025-12-21]
+                    st.session_state.academic_session_stopped = True
+                    st.rerun()
+        
+        # Display timer and phase indicator (if video-based lesson)
+        if video_path and video_path.exists():
+            # Initialize video timestamp tracking
+            if 'academic_video_start_time' not in st.session_state:
+                st.session_state.academic_video_start_time = time.time()
+            
+            # Calculate timer_elapsed (maps to video timestamp)
+            timer_elapsed = int(time.time() - st.session_state.academic_video_start_time)
+            phase_indicator = "Evaluator" if timer_elapsed >= 180 else "Helpful Assistant"
+            st.caption(f"⏱️ Timer: {timer_elapsed}s | Phase: {phase_indicator}")
+        
+        # Final Competency Submission - only show after at least one chat interaction or if session is stopped [cite: 2025-12-21]
         has_user_interaction = any(msg.get('role') == 'user' for msg in st.session_state.get('academic_chat_history', []))
-        if has_user_interaction:
+        session_stopped = st.session_state.get('academic_session_stopped', False)
+        if has_user_interaction or session_stopped:
             st.markdown("---")
             with st.expander("📝 Final Competency Submission", expanded=False):
                 st.markdown("**Submit your final response for competency assessment:**")
@@ -3924,6 +4053,10 @@ def show_academic_hub():
                                 lesson_name=lesson_name,
                                 session_id=st.session_state.get('academic_session_id', '')
                             )
+                            
+                            # Update mastery scores in database based on grading result [cite: 2025-12-21]
+                            if isinstance(grading_result, dict):
+                                update_mastery_scores_from_grading(candidate_id, "Academic", grading_result)
                             
                             st.success("✅ Assessment Complete!")
                             if isinstance(grading_result, dict):
@@ -4701,8 +4834,9 @@ def show_food_tech_hub():
                                 session_id=session_id
                             )
                             
-                            # Update session_total_words
+                            # Update mastery scores in database based on grading result [cite: 2025-12-21]
                             if isinstance(grading_result, dict):
+                                update_mastery_scores_from_grading(candidate_id, "Food/Tech", grading_result)
                                 question_word_count = grading_result.get('question_word_count', 0)
                                 st.session_state.food_tech_session_total_words = st.session_state.get('food_tech_session_total_words', 0) + question_word_count
                             
@@ -4817,6 +4951,21 @@ def show_caregiving_hub():
         st.subheader(f"📄 {lesson_name}")
         with st.expander("📋 View Transcript", expanded=True):
             st.markdown(current_lesson_transcript)
+        
+        # Mastery Score Preview (unified structure: Transcript -> Mastery Preview -> Chat Interface) [cite: 2025-12-21]
+        st.markdown("---")
+        st.subheader("📊 Mastery Score Preview")
+        mastery_scores, _ = calculate_mastery_scores(candidate_id)
+        if "Care-giving" in mastery_scores:
+            track_scores = mastery_scores["Care-giving"]
+            for skill, score in track_scores.items():
+                st.metric(
+                    label=skill,
+                    value=f"{score:.1f}%",
+                    help=f"Current mastery level for {skill} in Care-giving track"
+                )
+        else:
+            st.info("No mastery scores yet. Start chatting with Sensei to earn points!")
         
         # Start Socratic Discussion button - prominently displayed after transcript [cite: 2025-12-21]
         st.markdown("---")
@@ -4973,8 +5122,9 @@ def show_caregiving_hub():
                             session_id=session_id
                         )
                         
-                        # Update session_total_words
+                        # Update mastery scores in database based on grading result [cite: 2025-12-21]
                         if isinstance(grading_result, dict):
+                            update_mastery_scores_from_grading(candidate_id, "Care-giving", grading_result)
                             question_word_count = grading_result.get('question_word_count', 0)
                             st.session_state.caregiving_session_total_words = st.session_state.get('caregiving_session_total_words', 0) + question_word_count
                         

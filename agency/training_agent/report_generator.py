@@ -14,7 +14,7 @@ Features:
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
+import datetime as dt
 from pathlib import Path
 
 # Add project root to path
@@ -458,7 +458,7 @@ Be encouraging but honest. Focus on strengths and specific areas for improvement
         story.append(Spacer(1, 0.2*inch))
         
         # Report metadata
-        report_date = datetime.now(timezone.utc).strftime("%B %d, %Y")
+        report_date = dt.datetime.now(dt.timezone.utc).strftime("%B %d, %Y")
         story.append(Paragraph(f"<b>Student:</b> {candidate_name}", styles['Normal']))
         story.append(Paragraph(f"<b>Student ID:</b> {candidate_id}", styles['Normal']))
         story.append(Paragraph(f"<b>Report Date:</b> {report_date}", styles['Normal']))
@@ -721,7 +721,7 @@ Be encouraging but honest. Focus on strengths and specific areas for improvement
             if not self.output_path:
                 reports_dir = Path(__file__).parent.parent.parent / "static" / "reports"
                 reports_dir.mkdir(parents=True, exist_ok=True)
-                timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+                timestamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d_%H%M%S")
                 output_path = reports_dir / f"sensei_report_{self.candidate_id}_{timestamp}.pdf"
             else:
                 output_path = Path(self.output_path)
