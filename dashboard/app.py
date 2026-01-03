@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Xplora Kodo: Japan and Beyond - Streamlit Dashboard
 
@@ -1118,15 +1119,15 @@ User input: {user_input!r}
 
 **Your Response (as JLPT Sensei, using Socratic questioning, in the EXACT trilingual format shown above):**
 """
-        else:
+        elif current_page == "🍜 Food/Tech Hub" or current_page == "Food/Tech Hub" or track == "Food/Tech":
             # Food/Tech Sensei persona (default)
             prompt = f"""You are a Japanese Food Safety Sensei (Teacher) conducting a Socratic dialogue about HACCP (Hazard Analysis and Critical Control Points) and kitchen sanitization.
 
 **System Context - Lesson Transcript:**
 {transcript}
 
-**Language Instructions:**
-Based on the transcript context above, you should be prepared to speak in English, Japanese (Kanji/Kana), and Nepali (Devanagari) as needed. The transcript provides the lesson context that informs your responses.
+**CRITICAL: Knowledge Limitation**
+Your knowledge is strictly limited to the provided vocational transcript for the current lesson. If the student asks something outside this scope, guide them back to the lesson material. Do not provide information that is not in the transcript. [cite: 2025-12-20, 2025-12-21]
 
 **Your Role:**
 - You are a Socratic teacher. You DO NOT give direct answers.
@@ -1135,11 +1136,7 @@ Based on the transcript context above, you should be prepared to speak in Englis
   * Seiso (清掃) - Cleaning: Removing visible dirt and debris
   * Sakkin (殺菌) - Disinfection: Killing harmful microorganisms
   * Kansou (乾燥) - Air-drying: Allowing surfaces to air-dry naturally (no towels)
-
-**Language Detection:**
-- Detect the language the student is using (English, Japanese, or Nepali).
-- Respond in the SAME language the student uses.
-- If the student mixes languages, respond in the primary language they're using.
+- EVERY response must include all three languages in the format above.
 
 **Current Phase: {phase.upper()}**
 {phase_instruction}
@@ -1168,7 +1165,78 @@ Based on the transcript context above, you should be prepared to speak in Englis
 **Student's Latest Input:**
 User input: {user_input!r}
 
-**Your Response (as Sensei, in the student's language, using Socratic questioning):**
+**Your Response (as HACCP Sensei, using Socratic questioning, in the EXACT trilingual format shown above):**
+"""
+        elif current_page == "🏥 Care-giving Hub" or current_page == "Care-giving Hub" or track == "Care-giving":
+            # Care-giving Sensei persona
+            prompt = f"""You are a Japanese Care-giving Sensei (Teacher) conducting a Socratic dialogue about Kaigo (介護) and nursing care practices.
+
+**CRITICAL: Trilingual Response Format**
+Every single response you give MUST follow this exact Markdown format. There are NO exceptions:
+
+🇬🇧 English: [Your Socratic question/feedback in English]
+
+🇯🇵 Japanese: [Translation of the English part into Japanese using Kanji/Kana]
+
+🇳🇵 Nepali: [Translation of the English part into Nepali using Devanagari script]
+
+**System Context - Lesson Transcript:**
+{transcript}
+
+**CRITICAL: Knowledge Limitation**
+Your knowledge is strictly limited to the provided vocational transcript for the current lesson. If the student asks something outside this scope, guide them back to the lesson material. Do not provide information that is not in the transcript. [cite: 2025-12-20, 2025-12-21]
+
+**Your Role:**
+- You are a Socratic teacher. You DO NOT give direct answers.
+- You ask guiding questions that help the student discover the answers themselves.
+- You focus on care-giving practices, resident communication, and safety protocols:
+  * 体調 (Taichō) - Physical condition monitoring
+  * 介助 (Kaijo) - Assistance/Care-giving support
+  * 水分補給 (Suibun hokyū) - Hydration management
+  * 報告 (Hōkoku) - Reporting to head nurse
+  * 薬 (Kusuri) - Medicine administration
+
+**Current Phase: {phase.upper()}**
+{phase_instruction}
+
+**Key Topics to Explore:**
+1. Morning routine: Checking resident's 顔色 (Kaoiro - complexion) and 食欲 (Shokuyoku - appetite)
+2. Medicine administration: Ensuring 薬 (Kusuri) is taken at the correct time
+3. Communication: Proper 報告 (Hōkoku - reporting) to supervisors
+4. Safety: Proper use of 車椅子 (Kuruma-isu - wheelchair) and 介助 (Kaijo - assistance)
+5. Empathy: Using respectful phrases like お大事に (O-daiji ni - get well soon)
+
+**Socratic Method Rules:**
+- NEVER give the answer directly. Instead, ask: "What do you think would happen if...?"
+- If the student is stuck, ask a simpler related question to guide them.
+- If the student gives a partial answer, ask a follow-up to deepen understanding.
+- Praise correct thinking, but challenge assumptions gently.
+- If the student uses care-giving terminology (like Taichō, Kaijo, Hōkoku), acknowledge it positively.
+
+**Example Questions You Might Ask:**
+- "You notice a resident's 顔色 (Kaoiro) looks pale this morning. What should you check next, and why?"
+- "The resident hasn't eaten breakfast. What does this tell you about their 食欲 (Shokuyoku), and what action should you take?"
+- "Can you explain the difference between 介助 (Kaijo) and simply helping someone? Why is proper technique important?"
+
+{history_text}
+
+**Student's Latest Input:**
+User input: {user_input!r}
+
+**Your Response (as Kaigo Sensei, using Socratic questioning, in the EXACT trilingual format shown above):**
+"""
+        else:
+            # Food/Tech Sensei persona (default fallback)
+            prompt = f"""You are a Japanese Food Safety Sensei (Teacher) conducting a Socratic dialogue about HACCP (Hazard Analysis and Critical Control Points) and kitchen sanitization.
+
+**CRITICAL: Trilingual Response Format**
+Every single response you give MUST follow this exact Markdown format. There are NO exceptions:
+
+🇬🇧 English: [Your Socratic question/feedback in English]
+
+🇯🇵 Japanese: [Translation of the English part into Japanese using Kanji/Kana]
+
+🇳🇵 Nepali: [Translation of the English part into Nepali using Devanagari script]
 """
         
         response = client.models.generate_content(
@@ -1183,6 +1251,143 @@ User input: {user_input!r}
         logger = logging.getLogger(__name__)
         logger.error(f"Error getting Sensei response: {e}")
         return f"I encountered an error: {str(e)}. Please try again."
+
+
+def render_unified_chat_interface(
+    chat_history_key: str,
+    transcript: str,
+    lesson_name: str,
+    track: str,
+    current_page: str,
+    sensei_name: str = "Sensei",
+    placeholder_text: str = "Type your message..."
+) -> None:
+    """
+    Generic Chat Controller: Unified chat interface function for all hubs [cite: 2025-12-21]
+    
+    Args:
+        chat_history_key: Session state key for chat history (e.g., 'academic_chat_history')
+        transcript: Current lesson transcript
+        lesson_name: Name of the current lesson
+        track: Track category ('Academic', 'Food/Tech', 'Care-giving')
+        current_page: Current page identifier
+        sensei_name: Display name for the Sensei (e.g., 'JLPT Sensei', 'HACCP Sensei')
+        placeholder_text: Placeholder text for chat input
+    """
+    # Session Initialization: Ensure chat history is actively managed [cite: 2025-12-21]
+    if chat_history_key not in st.session_state:
+        st.session_state[chat_history_key] = []
+    
+    chat_history = st.session_state[chat_history_key]
+    
+    # Display chat history
+    if chat_history:
+        for message in chat_history:
+            if message['role'] == 'sensei':
+                with st.chat_message("assistant"):
+                    st.markdown(message['content'])
+            elif message['role'] == 'user':
+                with st.chat_message("user"):
+                    st.write(message['content'])
+    
+    # Start discussion button (only if chat is empty)
+    if len(chat_history) == 0:
+        if st.button("💬 Start Socratic Discussion", key=f"start_{track.lower().replace('/', '_')}_discussion", type="primary", use_container_width=True):
+            # Dynamic Syllabus Trigger: Generate track-specific Socratic opening question [cite: 2025-12-20, 2025-12-21]
+            initial_greeting_prompt = f"""Greeting: English first, then Japanese, then Nepali. Then ask one Socratic question about "{lesson_name}" based on the transcript.
+
+**Lesson Transcript:**
+{transcript}
+
+**Your Response (trilingual greeting + one Socratic question):**
+"""
+            with st.spinner(f"🎓 {sensei_name} is preparing your first question..."):
+                initial_greeting = get_sensei_response(
+                    user_input=initial_greeting_prompt,
+                    conversation_history=[],
+                    transcript=transcript,
+                    timer_elapsed=0,
+                    track=track,
+                    current_page=current_page
+                )
+                chat_history.append({
+                    'role': 'sensei',
+                    'content': initial_greeting
+                })
+                st.rerun()
+    
+    # Chat input
+    user_message = st.chat_input(placeholder_text)
+    if user_message:
+        # Add user message to chat history
+        chat_history.append({
+            'role': 'user',
+            'content': user_message
+        })
+        
+        # Get Sensei response using AAI Conversation logic
+        sensei_response = get_sensei_response(
+            user_input=user_message,
+            conversation_history=chat_history,
+            transcript=transcript,
+            timer_elapsed=0,
+            track=track,
+            current_page=current_page
+        )
+        
+        # Add Sensei response to chat history
+        chat_history.append({
+            'role': 'sensei',
+            'content': sensei_response
+        })
+        
+        # Update session state
+        st.session_state[chat_history_key] = chat_history
+        st.rerun()
+    
+    # Navigation Controls: Add control buttons for vocational tracks (Food/Tech and Care-giving) [cite: 2025-12-21]
+    if track in ["Food/Tech", "Care-giving"] and len(chat_history) > 0:
+        # Only show controls if there's at least one message in chat history
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("➡️ Next Question", key=f"next_question_{track.lower().replace('/', '_')}", use_container_width=True):
+                # Generate follow-up question based on conversation history and transcript [cite: 2025-12-20, 2025-12-21]
+                next_question_prompt = f"""Based on the conversation history below, generate a follow-up Socratic question that:
+1. Builds on the student's previous responses
+2. Deepens understanding of the topic from the transcript
+3. Maintains the trilingual format (English, Japanese, Nepali)
+
+**Conversation History:**
+{chr(10).join([f"{msg['role'].title()}: {msg['content']}" for msg in chat_history[-4:]])}
+
+**Lesson Transcript:**
+{transcript}
+
+**Your Response (trilingual follow-up Socratic question):**
+"""
+                with st.spinner(f"🎓 {sensei_name} is preparing the next question..."):
+                    next_question = get_sensei_response(
+                        user_input=next_question_prompt,
+                        conversation_history=chat_history,
+                        transcript=transcript,
+                        timer_elapsed=0,
+                        track=track,
+                        current_page=current_page
+                    )
+                    # Append new question to chat history [cite: 2025-12-21]
+                    chat_history.append({
+                        'role': 'sensei',
+                        'content': next_question
+                    })
+                    st.session_state[chat_history_key] = chat_history
+                    st.rerun()
+        
+        with col2:
+            if st.button("⏹️ Stop Session", key=f"stop_session_{track.lower().replace('/', '_')}", use_container_width=True):
+                # Mark session as stopped to allow jumping to Final Competency Submission [cite: 2025-12-21]
+                st.session_state[f"{track.lower().replace('/', '_')}_session_stopped"] = True
+                st.rerun()
 
 
 def check_vocabulary_bonus_terms(user_input: str, track: str = "Food/Tech") -> list[str]:
@@ -1358,43 +1563,12 @@ def get_concierge_response(user_input: str, language: str) -> str:
         # Platform feature questions
         if any(keyword in user_lower for keyword in ["support", "language", "nepalese", "nepali", "japanese", "multilingual", "what languages", "which languages"]):
             if "nepal" in user_lower or "nepali" in user_lower or "ne" in user_lower:
-                return """
-✅ **Yes! Xplora Kodo supports Nepali (नेपाली).**
-
-The platform is **trilingual** and supports:
-- 🇺🇸 **English** (en)
-- 🇯🇵 **Japanese** (日本語) (ja)
-- 🇳🇵 **Nepali** (नेपाली) (ne)
-
-You can switch languages using the language selector in the Concierge widget. All features including voice recording, text-to-speech, and AI responses work in all three languages."""
+                return 'Yes! Xplora Kodo supports Nepali (नेपाली). ✅\n\nThe platform is **trilingual** and supports:\n- 🇺🇸 **English** (en)\n- 🇯🇵 **Japanese** (日本語) (ja)\n- 🇳🇵 **Nepali** (नेपाली) (ne)\n\nYou can switch languages using the language selector in the Concierge widget. All features including voice recording, text-to-speech, and AI responses work in all three languages.'
             
             if "japan" in user_lower or "japanese" in user_lower or "ja" in user_lower:
-                return """
-✅ **Yes! Xplora Kodo supports Japanese (日本語).**
-
-The platform is **trilingual** and supports:
-- 🇺🇸 **English** (en)
-- 🇯🇵 **Japanese** (日本語) (ja)
-- 🇳🇵 **Nepali** (नेपाली) (ne)
-
-You can switch languages using the language selector in the Concierge widget. All features including voice recording, text-to-speech, and AI responses work in all three languages."""
+                return 'Yes! Xplora Kodo supports Japanese (日本語). ✅\n\nThe platform is **trilingual** and supports:\n- 🇺🇸 **English** (en)\n- 🇯🇵 **Japanese** (日本語) (ja)\n- 🇳🇵 **Nepali** (नेपाली) (ne)\n\nYou can switch languages using the language selector in the Concierge widget. All features including voice recording, text-to-speech, and AI responses work in all three languages.'
             
-            return """
-✅ **Xplora Kodo is a Trilingual Platform!**
-
-The platform supports **three languages**:
-- 🇺🇸 **English** (en)
-- 🇯🇵 **Japanese** (日本語) (ja)
-- 🇳🇵 **Nepali** (नेपाली) (ne)
-
-**Features available in all languages:**
-- Voice recording and transcription
-- Text-to-speech responses
-- AI-powered language coaching
-- Virtual classroom with Sensei avatar
-- Life-in-Japan support and advice
-
-Switch languages using the 🌐 Language selector above!"""
+            return 'Xplora Kodo is a Trilingual Platform! ✅\n\nThe platform supports **three languages**:\n- 🇺🇸 **English** (en)\n- 🇯🇵 **Japanese** (日本語) (ja)\n- 🇳🇵 **Nepali** (नेपाली) (ne)\n\n**Features available in all languages:**\n- Voice recording and transcription\n- Text-to-speech responses\n- AI-powered language coaching\n- Virtual classroom with Sensei avatar\n- Life-in-Japan support and advice\n\nSwitch languages using the 🌐 Language selector above!'
         
         # Check if user wants to navigate
         navigation_keywords = ["go to", "take me to", "show me", "navigate to", "open"]
@@ -1406,27 +1580,7 @@ Switch languages using the 🌐 Language selector above!"""
         # Check if it's a general question about the platform
         platform_keywords = ["what is", "what can", "how does", "how to", "help", "features", "capabilities"]
         if any(keyword in user_lower for keyword in platform_keywords) and not any(kw in user_lower for kw in ["visa", "bank", "housing", "health", "legal"]):
-            return """
-🤖 **Xplora Kodo Concierge can help you with:**
-
-**Platform Features:**
-- Language learning (N5-N3 Japanese proficiency)
-- Voice coaching with AI Sensei
-- Virtual classroom with 2D animated avatar
-- Trilingual support (English, Japanese, Nepali)
-
-**Life-in-Japan Support:**
-- Visa and immigration questions
-- Banking and financial services
-- Healthcare and insurance
-- Housing and utilities
-- Legal rights and responsibilities
-
-**Navigation:**
-- Say \"take me to [page name]\" to navigate
-- Available pages: Candidate View, Virtual Classroom, Life-in-Japan Support, etc.
-
-Try asking about specific topics like \"visa renewal\" or \"banking in Japan\" for detailed information!"""
+            return '**Xplora Kodo Concierge 🤖 can help you with:**\n\n**Platform Features:**\n- Language learning (N5-N3 Japanese proficiency)\n- Voice coaching with AI Sensei\n- Virtual classroom with 2D animated avatar\n- Trilingual support (English, Japanese, Nepali)\n\n**Life-in-Japan Support:**\n- Visa and immigration questions\n- Banking and financial services\n- Healthcare and insurance\n- Housing and utilities\n- Legal rights and responsibilities\n\n**Navigation:**\n- Say "take me to [page name]" to navigate\n- Available pages: Candidate View, Virtual Classroom, Life-in-Japan Support, etc.\n\nTry asking about specific topics like "visa renewal" or "banking in Japan" for detailed information!'
         
         # Otherwise, use GetLifeInJapanAdvice for life-in-Japan questions
         advice_tool = GetLifeInJapanAdvice(
@@ -1446,28 +1600,7 @@ Try asking about specific topics like \"visa renewal\" or \"banking in Japan\" f
                     client = genai.Client(api_key=config.GEMINI_API_KEY)
                     
                     # Create a comprehensive prompt for platform questions
-                    prompt = f"""
-You are the Xplora Kodo Concierge, an AI assistant for the Xplora Kodo platform.
-
-**Platform Overview:**
-Xplora Kodo is a 360° AI-powered lifecycle platform for Nepali human capital preparing for work in Japan. It provides:
-- Trilingual training (N5-N3 Japanese proficiency, Kaigo caregiving, AI/ML tech)
-- Voice coaching with AI Sensei and 2D animated avatar
-- Virtual classroom with live voice interaction
-- Life-in-Japan support (visa, banking, housing, legal)
-- Document vault and compliance tracking
-- Multi-phase progression system
-
-**User Question:** {user_input}
-
-**Instructions:**
-- Answer the question helpfully and accurately about Xplora Kodo platform features
-- If the question is about life in Japan (visa, banking, housing, etc.), acknowledge that specific information wasn't found in the knowledge base
-- Be conversational, friendly, and helpful
-- If you don't know something, suggest where the user can find more information
-- Keep responses concise (2-3 paragraphs max)
-
-**Response (in {language}):**"""
+                    prompt = f'You are the Xplora Kodo Concierge, an AI assistant for the Xplora Kodo platform.\n\n**Platform Overview:**\nXplora Kodo is a 360-degree AI-powered lifecycle platform for Nepali human capital preparing for work in Japan. It provides:\n- Trilingual training (N5-N3 Japanese proficiency, Kaigo caregiving, AI/ML tech)\n- Voice coaching with AI Sensei and 2D animated avatar\n- Virtual classroom with live voice interaction\n- Life-in-Japan support (visa, banking, housing, legal)\n- Document vault and compliance tracking\n- Multi-phase progression system\n\n**User Question:** {user_input}\n\n**Instructions:**\n- Answer the question helpfully and accurately about Xplora Kodo platform features\n- If the question is about life in Japan (visa, banking, housing, etc.), acknowledge that specific information wasn\'t found in the knowledge base\n- Be conversational, friendly, and helpful\n- If you don\'t know something, suggest where the user can find more information\n- Keep responses concise (2-3 paragraphs max)\n\n**Response (in {language}):**'
                     
                     ai_response = client.models.generate_content(
                         model="gemini-2.0-flash",
@@ -1655,7 +1788,7 @@ def main():
         except Exception:
             pass
     
-    page_options = ["Candidate View", "Wisdom Hub", "Video Hub", "📖 Academic Hub", "Progress", "Live Simulator", "Financial Ledger", "Compliance", "Life-in-Japan Support", "Virtual Classroom"]
+    page_options = ["Candidate View", "Wisdom Hub", "Video Hub", "📖 Academic Hub", "🍜 Food/Tech Hub", "🏥 Care-giving Hub", "Progress", "Live Simulator", "Financial Ledger", "Compliance", "Life-in-Japan Support", "Virtual Classroom"]
     if admin_mode:
         page_options.append("Admin Dashboard")
     
@@ -1668,11 +1801,30 @@ def main():
     st.session_state.page = page
     st.session_state.current_page = page  # Also store as current_page for compatibility
     
+    # Reset Today's Session: Date-based session reset for AI Daily Briefing and word counts [cite: 2025-12-21]
+    today = datetime.now().date()
+    if 'last_session_date' not in st.session_state or st.session_state.last_session_date != today:
+        # Reset session state for new day
+        st.session_state.last_session_date = today
+        st.session_state.academic_session_total_words = 0
+        st.session_state.food_tech_session_total_words = 0
+        st.session_state.caregiving_session_total_words = 0
+        st.session_state.academic_current_session_id = None
+        st.session_state.food_tech_session_id = None
+        st.session_state.caregiving_session_id = None
+        st.session_state.last_word_count = 0  # Reset for milestone celebration
+    
     # Initialize Academic Hub session state variables [cite: 2025-12-21]
     if 'academic_chat_history' not in st.session_state:
         st.session_state.academic_chat_history = []
     if 'academic_competency_response' not in st.session_state:
         st.session_state.academic_competency_response = ""
+    
+    # Initialize Histories: Add food_tech_chat_history and caregiving_chat_history to prevent crashes [cite: 2025-12-21]
+    if 'food_tech_chat_history' not in st.session_state:
+        st.session_state.food_tech_chat_history = []
+    if 'caregiving_chat_history' not in st.session_state:
+        st.session_state.caregiving_chat_history = []
     
     # Show Concierge Widget (after page selection to avoid conflicts)
     # Always show widget - it's a core feature
@@ -1699,6 +1851,10 @@ def main():
             show_video_hub()
         elif page == "📖 Academic Hub":
             show_academic_hub()
+        elif page == "🍜 Food/Tech Hub":
+            show_food_tech_hub()
+        elif page == "🏥 Care-giving Hub":
+            show_caregiving_hub()
         elif page == "Progress":
             show_progress_dashboard()
         elif page == "Live Simulator":
@@ -2096,13 +2252,16 @@ def show_progress_dashboard():
         if entry.get("category") == "Care-giving"
     )
     
+    # Calculate total career vocabulary (sum of all categories) for display and milestone celebration [cite: 2025-12-21]
+    total_career_vocab = academic_word_count + food_tech_word_count + caregiving_word_count
+    
     # Milestone Celebration: Check if word count increased since last session [cite: 2025-12-21]
     if 'last_word_count' not in st.session_state:
         st.session_state.last_word_count = 0
     
-    if total_word_count > st.session_state.last_word_count:
+    if total_career_vocab > st.session_state.last_word_count:
         st.balloons()  # Milestone Celebration: Trigger balloons for 2026 progress [cite: 2025-12-21]
-        st.session_state.last_word_count = total_word_count
+        st.session_state.last_word_count = total_career_vocab
     
     # Visual Progress Bar: Display category-specific progress bars [cite: 2025-12-21]
     st.subheader("📊 Category-Specific Progress")
@@ -2120,13 +2279,13 @@ def show_progress_dashboard():
         st.progress(caregiving_progress)
         st.caption(f"🏥 Care-giving: {caregiving_word_count} / 3,000 words")
     
-    # Overall progress bar
+    # Overall progress bar: Use total career vocabulary (sum of all categories) [cite: 2025-12-21]
     st.markdown("---")
-    progress_value = min(total_word_count / 3000.0, 1.0)  # Calculation: min(total_word_count / 3000, 1.0) [cite: 2025-12-21]
+    progress_value = min(total_career_vocab / 3000.0, 1.0)  # Calculation: min(total_career_vocab / 3000, 1.0) [cite: 2025-12-21]
     st.progress(progress_value)
     
     # Sub-header: Show word count toward target [cite: 2025-12-21]
-    st.subheader(f'{total_word_count} / 3,000 words toward Commercial Center Competency')
+    st.subheader(f'{total_career_vocab} / 3,000 words toward Commercial Center Competency')
     
     # Activity Log: Display lesson_history in dataframe [cite: 2025-12-21]
     if lesson_history:
@@ -3442,11 +3601,16 @@ def show_academic_hub():
     """Display Academic Hub with JLPT-focused Socratic assessment."""
     st.header("📖 Academic Hub - JLPT Mastery")
     
-    # Mastery Dashboard: Display total word count at top of Academic Hub [cite: 2025-12-21]
-    total_count, _ = load_mastery_stats()  # Updated to handle tuple return [cite: 2025-12-21]
+    # Mastery Dashboard: Display total career vocabulary (cumulative across all categories) [cite: 2025-12-21]
+    _, lesson_history = load_mastery_stats()  # Get lesson_history to calculate total career vocabulary
+    # Global vs. Session: Calculate total career vocabulary from all categories [cite: 2025-07-07, 2025-12-21]
+    total_career_vocab = sum(
+        entry.get("scores", {}).get("word_count", 0)
+        for entry in lesson_history
+    )
     st.metric(
-        label="Global Vocabulary Count",
-        value=total_count,
+        label="Total Career Vocabulary (Cumulative)",
+        value=total_career_vocab,
         delta="Target: 3,000"
     )
     st.markdown("---")
@@ -4264,115 +4428,203 @@ def show_food_tech_hub():
             st.error("Transcript file not found.")
             return
         
-        # Sidebar with Sensei chat
+        # Sidebar with Sensei chat - Using unified chat interface [cite: 2025-12-21]
         with st.sidebar:
             st.header("🍜 Food/Tech Hub Controls")
             st.subheader("🎓 HACCP Sensei")
             
-            # Chat interface (simplified version of Academic Hub)
-            if st.session_state.food_tech_chat_history:
-                for message in st.session_state.food_tech_chat_history:
-                    if message['role'] == 'sensei':
-                        with st.chat_message("assistant"):
-                            st.markdown(message['content'])
-                    elif message['role'] == 'user':
-                        with st.chat_message("user"):
-                            st.write(message['content'])
+            # Dynamic Syllabus Trigger: Check if this is a Mastery Test [cite: 2025-12-21]
+            is_mastery_test = "mastery_test" in lesson_name.lower() or "mastery" in transcript_path.stem.lower()
             
-            # Start discussion button
-            if len(st.session_state.food_tech_chat_history) == 0:
-                if st.button("💬 Start Socratic Discussion", key="start_food_tech_discussion", type="primary", use_container_width=True):
-                    initial_greeting_prompt = f"""Greeting: English first, then Japanese, then Nepali. Then ask one question about "{lesson_name}".
-
-**Lesson Transcript:**
-{current_lesson_transcript}
-
-**Your Response (trilingual greeting + one Socratic question):**
-"""
-                    with st.spinner("🎓 Sensei is preparing your first question..."):
-                        initial_greeting = get_sensei_response(
-                            user_input=initial_greeting_prompt,
-                            conversation_history=[],
-                            transcript=current_lesson_transcript,
-                            timer_elapsed=0,
-                            track="Food/Tech",  # Category Tagging: Food/Tech track [cite: 2025-12-21]
-                            current_page="🍜 Food/Tech Hub"
-                        )
-                        st.session_state.food_tech_chat_history.append({
-                            'role': 'sensei',
-                            'content': initial_greeting
-                        })
-                        st.rerun()
+            # If Mastery Test, load specific transcript (n5_haccp_basics.txt for Food/Tech) [cite: 2025-12-21]
+            if is_mastery_test:
+                mastery_transcript_path = transcript_dir / "n5_haccp_basics.txt"
+                if mastery_transcript_path.exists():
+                    current_lesson_transcript = mastery_transcript_path.read_text(encoding='utf-8').strip()
+                    st.session_state.food_tech_current_lesson_transcript = current_lesson_transcript
+                    st.info("📋 Mastery Test detected. Using HACCP Basics syllabus.")
             
-            # Chat input
-            user_message = st.chat_input("Type your message to HACCP Sensei...")
-            if user_message:
-                st.session_state.food_tech_chat_history.append({
-                    'role': 'user',
-                    'content': user_message
-                })
-                sensei_response = get_sensei_response(
-                    user_input=user_message,
-                    conversation_history=st.session_state.food_tech_chat_history,
-                    transcript=current_lesson_transcript,
-                    timer_elapsed=0,
-                    track="Food/Tech",
-                    current_page="🍜 Food/Tech Hub"
-                )
-                st.session_state.food_tech_chat_history.append({
-                    'role': 'sensei',
-                    'content': sensei_response
-                })
-                st.rerun()
+            # Generic Chat Controller: Use unified chat interface [cite: 2025-12-21]
+            render_unified_chat_interface(
+                chat_history_key='food_tech_chat_history',
+                transcript=current_lesson_transcript,
+                lesson_name=lesson_name,
+                track="Food/Tech",
+                current_page="🍜 Food/Tech Hub",
+                sensei_name="HACCP Sensei",
+                placeholder_text="Type your message to HACCP Sensei..."
+            )
         
         # Main content: Display transcript
         st.subheader(f"📄 {lesson_name}")
         with st.expander("📋 View Transcript", expanded=True):
             st.markdown(current_lesson_transcript)
         
-        # Final Competency Submission (mirroring Academic Hub)
+        # Start Socratic Discussion button - prominently displayed after transcript [cite: 2025-12-21]
         st.markdown("---")
-        with st.expander("📝 Final Competency Submission", expanded=False):
-            st.markdown("**Submit your final response for competency assessment:**")
+        if len(st.session_state.get('food_tech_chat_history', [])) == 0:
+            if st.button("💬 Start Socratic Discussion", key="start_food_tech_discussion", type="primary", use_container_width=True):
+                # Initialize chat history if needed
+                if 'food_tech_chat_history' not in st.session_state:
+                    st.session_state.food_tech_chat_history = []
+                
+                # Generate initial greeting using render_unified_chat_interface logic
+                initial_greeting_prompt = f"""Greeting: English first, then Japanese, then Nepali. Then ask one Socratic question about "{lesson_name}" based on the transcript.
+
+**Lesson Transcript:**
+{current_lesson_transcript}
+
+**Your Response (trilingual greeting + one Socratic question):**
+"""
+                with st.spinner("🎓 HACCP Sensei is preparing your first question..."):
+                    initial_greeting = get_sensei_response(
+                        user_input=initial_greeting_prompt,
+                        conversation_history=[],
+                        transcript=current_lesson_transcript,
+                        timer_elapsed=0,
+                        track="Food/Tech",
+                        current_page="🍜 Food/Tech Hub"
+                    )
+                    st.session_state.food_tech_chat_history.append({
+                        'role': 'sensei',
+                        'content': initial_greeting
+                    })
+                    st.rerun()
+        
+        # Persistent Chat Rendering: Display chat interface in main content area when chat history exists [cite: 2025-12-21]
+        food_tech_chat_history = st.session_state.get('food_tech_chat_history', [])
+        if food_tech_chat_history:
+            st.markdown("---")
+            st.subheader("💬 Chat with HACCP Sensei")
             
-            if 'food_tech_competency_response' not in st.session_state:
-                st.session_state.food_tech_competency_response = ""
+            # Display chat history
+            for message in food_tech_chat_history:
+                if message['role'] == 'sensei':
+                    with st.chat_message("assistant"):
+                        st.markdown(message['content'])
+                elif message['role'] == 'user':
+                    with st.chat_message("user"):
+                        st.write(message['content'])
             
-            final_response = st.text_area(
-                "Your final competency response:",
-                value=st.session_state.food_tech_competency_response,
-                key="food_tech_final_response",
-                height=300
-            )
+            # Chat input for user messages
+            user_message = st.chat_input("Type your message to HACCP Sensei...")
+            if user_message:
+                # Add user message to chat history
+                food_tech_chat_history.append({
+                    'role': 'user',
+                    'content': user_message
+                })
+                
+                # Get Sensei response
+                sensei_response = get_sensei_response(
+                    user_input=user_message,
+                    conversation_history=food_tech_chat_history,
+                    transcript=current_lesson_transcript,
+                    timer_elapsed=0,
+                    track="Food/Tech",
+                    current_page="🍜 Food/Tech Hub"
+                )
+                
+                # Add Sensei response to chat history
+                food_tech_chat_history.append({
+                    'role': 'sensei',
+                    'content': sensei_response
+                })
+                
+                # Update session state
+                st.session_state.food_tech_chat_history = food_tech_chat_history
+                st.rerun()
             
-            word_count = len(final_response.split()) if final_response else 0
-            st.caption(f"Word count: {word_count} / 3,000")
-            
-            if st.button("🚀 Submit to Sensei", key="food_tech_submit", type="primary"):
-                if final_response:
-                    try:
-                        from agency.training_agent.competency_grading_tool import CompetencyGradingTool
-                        grading_tool = CompetencyGradingTool()
-                        
-                        grading_result = grading_tool.run(
-                            response=final_response,
-                            candidate_id=candidate_id,
-                            track="Food/Tech",  # Category Tagging: Food/Tech [cite: 2025-12-21]
-                            language="en",
-                            lesson_name=lesson_name,
-                            session_id=session_id
-                        )
-                        
-                        # Update session_total_words
-                        if isinstance(grading_result, dict):
-                            question_word_count = grading_result.get('question_word_count', 0)
-                            st.session_state.food_tech_session_total_words = st.session_state.get('food_tech_session_total_words', 0) + question_word_count
-                        
-                        st.success("✅ Assessment Complete!")
-                        if isinstance(grading_result, dict):
-                            st.metric("Overall Grade", f"{grading_result.get('grade', 'N/A')}/10")
-                    except Exception as e:
-                        st.error(f"Error during grading: {str(e)}")
+            # Navigation Controls: Add control buttons for Food/Tech Hub [cite: 2025-12-21]
+            if len(food_tech_chat_history) > 0:
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button("➡️ Next Question", key="next_question_food_tech_main", use_container_width=True):
+                        # Generate follow-up question based on conversation history and transcript [cite: 2025-12-20, 2025-12-21]
+                        next_question_prompt = f"""Based on the conversation history below, generate a follow-up Socratic question that:
+1. Builds on the student's previous responses
+2. Deepens understanding of the topic from the transcript
+3. Maintains the trilingual format (English, Japanese, Nepali)
+
+**Conversation History:**
+{chr(10).join([f"{msg['role'].title()}: {msg['content']}" for msg in food_tech_chat_history[-4:]])}
+
+**Lesson Transcript:**
+{current_lesson_transcript}
+
+**Your Response (trilingual follow-up Socratic question):**
+"""
+                        with st.spinner("🎓 HACCP Sensei is preparing the next question..."):
+                            next_question = get_sensei_response(
+                                user_input=next_question_prompt,
+                                conversation_history=food_tech_chat_history,
+                                transcript=current_lesson_transcript,
+                                timer_elapsed=0,
+                                track="Food/Tech",
+                                current_page="🍜 Food/Tech Hub"
+                            )
+                            # Append new question to chat history [cite: 2025-12-21]
+                            food_tech_chat_history.append({
+                                'role': 'sensei',
+                                'content': next_question
+                            })
+                            st.session_state.food_tech_chat_history = food_tech_chat_history
+                            st.rerun()
+                
+                with col2:
+                    if st.button("⏹️ Stop Session", key="stop_session_food_tech_main", use_container_width=True):
+                        # Mark session as stopped to allow jumping to Final Competency Submission [cite: 2025-12-21]
+                        st.session_state.food_tech_session_stopped = True
+                        st.rerun()
+        
+        # Final Competency Submission - only show after at least one chat interaction or if session is stopped [cite: 2025-12-21]
+        # Check if there's at least one user message in chat history or if session was stopped
+        has_user_interaction = any(msg.get('role') == 'user' for msg in st.session_state.get('food_tech_chat_history', []))
+        session_stopped = st.session_state.get('food_tech_session_stopped', False)
+        if has_user_interaction or session_stopped:
+            st.markdown("---")
+            with st.expander("📝 Final Competency Submission", expanded=False):
+                st.markdown("**Submit your final response for competency assessment:**")
+                
+                if 'food_tech_competency_response' not in st.session_state:
+                    st.session_state.food_tech_competency_response = ""
+                
+                final_response = st.text_area(
+                    "Your final competency response:",
+                    value=st.session_state.food_tech_competency_response,
+                    key="food_tech_final_response",
+                    height=300
+                )
+                
+                word_count = len(final_response.split()) if final_response else 0
+                st.caption(f"Word count: {word_count} / 3,000")
+                
+                if st.button("🚀 Submit to Sensei", key="food_tech_submit", type="primary"):
+                    if final_response:
+                        try:
+                            from agency.training_agent.competency_grading_tool import CompetencyGradingTool
+                            grading_tool = CompetencyGradingTool()
+                            
+                            grading_result = grading_tool.run(
+                                response=final_response,
+                                candidate_id=candidate_id,
+                                track="Food/Tech",  # Category Tagging: Food/Tech [cite: 2025-12-21]
+                                language="en",
+                                lesson_name=lesson_name,
+                                session_id=session_id
+                            )
+                            
+                            # Update session_total_words
+                            if isinstance(grading_result, dict):
+                                question_word_count = grading_result.get('question_word_count', 0)
+                                st.session_state.food_tech_session_total_words = st.session_state.get('food_tech_session_total_words', 0) + question_word_count
+                            
+                            st.success("✅ Assessment Complete!")
+                            if isinstance(grading_result, dict):
+                                st.metric("Overall Grade", f"{grading_result.get('grade', 'N/A')}/10")
+                        except Exception as e:
+                            st.error(f"Error during grading: {str(e)}")
 
 
 def show_caregiving_hub():
@@ -4448,85 +4700,173 @@ def show_caregiving_hub():
             st.error("Transcript file not found.")
             return
         
-        # Sidebar with Sensei chat
+        # Sidebar with Sensei chat - Using unified chat interface [cite: 2025-12-21]
         with st.sidebar:
             st.header("🏥 Care-giving Hub Controls")
             st.subheader("🎓 Kaigo Sensei")
             
-            # Chat interface (simplified version of Academic Hub)
-            if st.session_state.caregiving_chat_history:
-                for message in st.session_state.caregiving_chat_history:
-                    if message['role'] == 'sensei':
-                        with st.chat_message("assistant"):
-                            st.markdown(message['content'])
-                    elif message['role'] == 'user':
-                        with st.chat_message("user"):
-                            st.write(message['content'])
+            # Dynamic Syllabus Trigger: Check if this is a Mastery Test [cite: 2025-12-21]
+            is_mastery_test = "mastery_test" in lesson_name.lower() or "mastery" in transcript_path.stem.lower()
             
-            # Start discussion button
-            if len(st.session_state.caregiving_chat_history) == 0:
-                if st.button("💬 Start Socratic Discussion", key="start_caregiving_discussion", type="primary", use_container_width=True):
-                    initial_greeting_prompt = f"""Greeting: English first, then Japanese, then Nepali. Then ask one question about "{lesson_name}".
-
-**Lesson Transcript:**
-{current_lesson_transcript}
-
-**Your Response (trilingual greeting + one Socratic question):**
-"""
-                    with st.spinner("🎓 Sensei is preparing your first question..."):
-                        initial_greeting = get_sensei_response(
-                            user_input=initial_greeting_prompt,
-                            conversation_history=[],
-                            transcript=current_lesson_transcript,
-                            timer_elapsed=0,
-                            track="Care-giving",  # Category Tagging: Care-giving track [cite: 2025-12-21]
-                            current_page="🏥 Care-giving Hub"
-                        )
-                        st.session_state.caregiving_chat_history.append({
-                            'role': 'sensei',
-                            'content': initial_greeting
-                        })
-                        st.rerun()
+            # If Mastery Test, load specific transcript (mastery_test_nursing.txt for Care-giving) [cite: 2025-12-21]
+            if is_mastery_test:
+                mastery_transcript_path = transcript_dir / "mastery_test_nursing.txt"
+                if mastery_transcript_path.exists():
+                    current_lesson_transcript = mastery_transcript_path.read_text(encoding='utf-8').strip()
+                    st.session_state.caregiving_current_lesson_transcript = current_lesson_transcript
+                    st.info("📋 Mastery Test detected. Using Nursing Care syllabus.")
             
-            # Chat input
-            user_message = st.chat_input("Type your message to Kaigo Sensei...")
-            if user_message:
-                st.session_state.caregiving_chat_history.append({
-                    'role': 'user',
-                    'content': user_message
-                })
-                sensei_response = get_sensei_response(
-                    user_input=user_message,
-                    conversation_history=st.session_state.caregiving_chat_history,
-                    transcript=current_lesson_transcript,
-                    timer_elapsed=0,
-                    track="Care-giving",
-                    current_page="🏥 Care-giving Hub"
-                )
-                st.session_state.caregiving_chat_history.append({
-                    'role': 'sensei',
-                    'content': sensei_response
-                })
-                st.rerun()
+            # Generic Chat Controller: Use unified chat interface [cite: 2025-12-21]
+            render_unified_chat_interface(
+                chat_history_key='caregiving_chat_history',
+                transcript=current_lesson_transcript,
+                lesson_name=lesson_name,
+                track="Care-giving",
+                current_page="🏥 Care-giving Hub",
+                sensei_name="Kaigo Sensei",
+                placeholder_text="Type your message to Kaigo Sensei..."
+            )
         
         # Main content: Display transcript
         st.subheader(f"📄 {lesson_name}")
         with st.expander("📋 View Transcript", expanded=True):
             st.markdown(current_lesson_transcript)
         
-        # Final Competency Submission (mirroring Academic Hub)
+        # Start Socratic Discussion button - prominently displayed after transcript [cite: 2025-12-21]
         st.markdown("---")
-        with st.expander("📝 Final Competency Submission", expanded=False):
-            st.markdown("**Submit your final response for competency assessment:**")
+        if len(st.session_state.get('caregiving_chat_history', [])) == 0:
+            if st.button("💬 Start Socratic Discussion", key="start_caregiving_discussion", type="primary", use_container_width=True):
+                # Initialize chat history if needed
+                if 'caregiving_chat_history' not in st.session_state:
+                    st.session_state.caregiving_chat_history = []
+                
+                # Generate initial greeting using render_unified_chat_interface logic
+                initial_greeting_prompt = f"""Greeting: English first, then Japanese, then Nepali. Then ask one Socratic question about "{lesson_name}" based on the transcript.
+
+**Lesson Transcript:**
+{current_lesson_transcript}
+
+**Your Response (trilingual greeting + one Socratic question):**
+"""
+                with st.spinner("🎓 Kaigo Sensei is preparing your first question..."):
+                    initial_greeting = get_sensei_response(
+                        user_input=initial_greeting_prompt,
+                        conversation_history=[],
+                        transcript=current_lesson_transcript,
+                        timer_elapsed=0,
+                        track="Care-giving",
+                        current_page="🏥 Care-giving Hub"
+                    )
+                    st.session_state.caregiving_chat_history.append({
+                        'role': 'sensei',
+                        'content': initial_greeting
+                    })
+                    st.rerun()
+        
+        # Persistent Chat Rendering: Display chat interface in main content area when chat history exists [cite: 2025-12-21]
+        caregiving_chat_history = st.session_state.get('caregiving_chat_history', [])
+        if caregiving_chat_history:
+            st.markdown("---")
+            st.subheader("💬 Chat with Kaigo Sensei")
             
-            if 'caregiving_competency_response' not in st.session_state:
-                st.session_state.caregiving_competency_response = ""
+            # Display chat history
+            for message in caregiving_chat_history:
+                if message['role'] == 'sensei':
+                    with st.chat_message("assistant"):
+                        st.markdown(message['content'])
+                elif message['role'] == 'user':
+                    with st.chat_message("user"):
+                        st.write(message['content'])
             
-            final_response = st.text_area(
-                "Your final competency response:",
-                value=st.session_state.caregiving_competency_response,
-                key="caregiving_final_response",
-                height=300
+            # Chat input for user messages
+            user_message = st.chat_input("Type your message to Kaigo Sensei...")
+            if user_message:
+                # Add user message to chat history
+                caregiving_chat_history.append({
+                    'role': 'user',
+                    'content': user_message
+                })
+                
+                # Get Sensei response
+                sensei_response = get_sensei_response(
+                    user_input=user_message,
+                    conversation_history=caregiving_chat_history,
+                    transcript=current_lesson_transcript,
+                    timer_elapsed=0,
+                    track="Care-giving",
+                    current_page="🏥 Care-giving Hub"
+                )
+                
+                # Add Sensei response to chat history
+                caregiving_chat_history.append({
+                    'role': 'sensei',
+                    'content': sensei_response
+                })
+                
+                # Update session state
+                st.session_state.caregiving_chat_history = caregiving_chat_history
+                st.rerun()
+            
+            # Navigation Controls: Add control buttons for Care-giving Hub [cite: 2025-12-21]
+            if len(caregiving_chat_history) > 0:
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button("➡️ Next Question", key="next_question_caregiving_main", use_container_width=True):
+                        # Generate follow-up question based on conversation history and transcript [cite: 2025-12-20, 2025-12-21]
+                        next_question_prompt = f"""Based on the conversation history below, generate a follow-up Socratic question that:
+1. Builds on the student's previous responses
+2. Deepens understanding of the topic from the transcript
+3. Maintains the trilingual format (English, Japanese, Nepali)
+
+**Conversation History:**
+{chr(10).join([f"{msg['role'].title()}: {msg['content']}" for msg in caregiving_chat_history[-4:]])}
+
+**Lesson Transcript:**
+{current_lesson_transcript}
+
+**Your Response (trilingual follow-up Socratic question):**
+"""
+                        with st.spinner("🎓 Kaigo Sensei is preparing the next question..."):
+                            next_question = get_sensei_response(
+                                user_input=next_question_prompt,
+                                conversation_history=caregiving_chat_history,
+                                transcript=current_lesson_transcript,
+                                timer_elapsed=0,
+                                track="Care-giving",
+                                current_page="🏥 Care-giving Hub"
+                            )
+                            # Append new question to chat history [cite: 2025-12-21]
+                            caregiving_chat_history.append({
+                                'role': 'sensei',
+                                'content': next_question
+                            })
+                            st.session_state.caregiving_chat_history = caregiving_chat_history
+                            st.rerun()
+                
+                with col2:
+                    if st.button("⏹️ Stop Session", key="stop_session_caregiving_main", use_container_width=True):
+                        # Mark session as stopped to allow jumping to Final Competency Submission [cite: 2025-12-21]
+                        st.session_state.caregiving_session_stopped = True
+                        st.rerun()
+        
+        # Final Competency Submission - only show after at least one chat interaction or if session is stopped [cite: 2025-12-21]
+        # Check if there's at least one user message in chat history or if session was stopped
+        has_user_interaction = any(msg.get('role') == 'user' for msg in st.session_state.get('caregiving_chat_history', []))
+        session_stopped = st.session_state.get('caregiving_session_stopped', False)
+        if has_user_interaction or session_stopped:
+            st.markdown("---")
+            with st.expander("📝 Final Competency Submission", expanded=False):
+                st.markdown("**Submit your final response for competency assessment:**")
+                
+                if 'caregiving_competency_response' not in st.session_state:
+                    st.session_state.caregiving_competency_response = ""
+                
+                final_response = st.text_area(
+                    "Your final competency response:",
+                    value=st.session_state.caregiving_competency_response,
+                    key="caregiving_final_response",
+                    height=300
             )
             
             word_count = len(final_response.split()) if final_response else 0

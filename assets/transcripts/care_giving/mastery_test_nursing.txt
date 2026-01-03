@@ -1,0 +1,15 @@
+MASTERY TEST: NURSING CARE - MORNING ROUTINE
+
+KEY CHALLENGE:
+Effectively monitor and report on a resident's physical state.
+
+VOCABULARY TO TEST:
+1. 顔色 (Kaoiro) - Complexion
+2. 食欲 (Shokuyoku) - Appetite
+3. 薬 (Kusuri) - Medicine
+4. 報告 (Hōkoku) - Report
+
+CONTEXT LOGIC:
+- Check the resident's "顔色" (Kaoiro) as soon as they wake up.
+- If they have no "食欲" (Shokuyoku), you must "報告" (Hōkoku) to the head nurse.
+- Ensure the "薬" (Kusuri) is taken exactly at 8:00 AM.

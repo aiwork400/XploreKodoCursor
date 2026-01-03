@@ -295,7 +295,7 @@ USER_PROGRESS_FILE = "assets/user_progress.json"
 # Note: In production, this should be stored in environment variables or a secure secrets manager
 DB_ARCHIVE_PASSWORD = os.getenv("DB_ARCHIVE_PASSWORD", "Arm!ta1390")
 
-def save_grading_result(lesson_name: str, scores: dict, session_id: Optional[str] = None):
+def save_grading_result(lesson_name: str, scores: dict, session_id: Optional[str] = None, category: Optional[str] = None):
     """
     Saves competency scores to a persistent JSON file with session persistence.
     Session Persistence: Stores under session_id and calculates session totals [cite: 2025-12-21]
@@ -304,6 +304,7 @@ def save_grading_result(lesson_name: str, scores: dict, session_id: Optional[str
         lesson_name: Name of the lesson (e.g., "2. N5 Kitchen Safety & Hygiene")
         scores: Dictionary containing grade, word_count, question_word_count, question_duration, sensei_critique, etc.
         session_id: Session ID for grouping related questions [cite: 2025-12-21]
+        category: Category tag (Academic, Food/Tech, Care-giving) [cite: 2025-12-21]
     """
     # Ensure assets directory exists
     os.makedirs("assets", exist_ok=True)

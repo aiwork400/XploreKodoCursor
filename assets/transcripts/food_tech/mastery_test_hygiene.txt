@@ -1,0 +1,15 @@
+MASTERY TEST: HACCP COMPLIANCE - KITCHEN SAFETY
+
+KEY CHALLENGE:
+Apply hygiene protocols during a busy shift to prevent contamination.
+
+VOCABULARY TO TEST:
+1. 清潔 (Seiketsu) - Cleanliness/Hygiene
+2. 汚染 (Osen) - Contamination
+3. 手袋 (Tebukuro) - Gloves
+4. 確認 (Kakunin) - Confirmation/Verification
+
+CONTEXT LOGIC:
+- Every morning, "清潔" (Seiketsu) check is mandatory.
+- If you touch raw meat, you must change your "手袋" (Tebukuro) to avoid "汚染" (Osen).
+- Always "確認" (Kakunin) the fridge temperature every 4 hours.

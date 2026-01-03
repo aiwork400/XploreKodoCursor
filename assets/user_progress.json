@@ -1,5 +1,5 @@
 {
-    "total_word_count": 130,
+    "total_word_count": 136,
     "lesson_history": [
         {
             "timestamp": "2026-01-01T17:21:56.832071",
@@ -8,8 +8,10 @@
                 "grade": 3,
                 "word_count": 5,
                 "accuracy_feedback": "The statement is too vague to assess accuracy. More context is needed to determine what 'something more' refers to. In an academic context, specificity and evidence are crucial.",
-                "grammar_feedback": "Grammatically correct but lacks complexity and detail expected in academic discourse. Consider expanding the sentence and providing supporting arguments."
-            }
+                "grammar_feedback": "Grammatically correct but lacks complexity and detail expected in academic discourse. Consider expanding the sentence and providing supporting arguments.",
+                "category": "Food/Tech"
+            },
+            "category": "Food/Tech"
         },
         {
             "timestamp": "2026-01-01T21:12:34.676432",
@@ -18,8 +20,10 @@
                 "grade": 6,
                 "word_count": 14,
                 "accuracy_feedback": "Using a dry cloth might not be the most effective method for cleaning a floor, depending on the type of dirt. Also, while '衛生 (Eisei)' translates to hygiene or sanitation, simply wiping with a dry cloth might not achieve a satisfactory level of 'Eisei'. Consider adding details about the type of floor and dirt, and whether you used any cleaning products. Are you asking if it *promotes* 'Eisei' or achieves a certain level of it?",
-                "grammar_feedback": "The grammar is correct. However, consider phrasing it as 'Is this a hygienic way to clean?' or 'Does this adequately sanitize the floor?' for more natural phrasing. You could also ask 'Does this contribute to good 衛生 (Eisei)?'"
-            }
+                "grammar_feedback": "The grammar is correct. However, consider phrasing it as 'Is this a hygienic way to clean?' or 'Does this adequately sanitize the floor?' for more natural phrasing. You could also ask 'Does this contribute to good 衛生 (Eisei)?'",
+                "category": "Food/Tech"
+            },
+            "category": "Food/Tech"
         },
         {
             "timestamp": "2026-01-01T21:28:29.223658",
@@ -28,8 +32,10 @@
                 "grade": 9,
                 "word_count": 27,
                 "accuracy_feedback": "Excellent use of Japanese vocabulary (安全靴 and 衛生) in context. Demonstrates understanding of their meanings within a kitchen setting.",
-                "grammar_feedback": "Grammatically sound and clear. The sentence structure is natural and appropriate."
-            }
+                "grammar_feedback": "Grammatically sound and clear. The sentence structure is natural and appropriate.",
+                "category": "Food/Tech"
+            },
+            "category": "Food/Tech"
         },
         {
             "timestamp": "2026-01-01T21:44:11.272174",
@@ -38,8 +44,10 @@
                 "grade": 7,
                 "word_count": 19,
                 "accuracy_feedback": "The translation of 安全靴 (Anzen-gutsu) as 'safety shoes' is accurate. 衛生 (Eisei) referring to hygiene/sanitation is also accurate. However, specifying 'safety shoes' instead of simply 安全靴 and 'hygiene' instead of 衛生 would make the sentence flow more naturally in English.",
-                "grammar_feedback": "The grammar is generally correct, but the sentence sounds slightly stilted. Combining the two ideas into one sentence might improve flow: 'I will always wear safety shoes (安全靴) and maintain kitchen hygiene (衛生) because sanitation is my top priority.'"
-            }
+                "grammar_feedback": "The grammar is generally correct, but the sentence sounds slightly stilted. Combining the two ideas into one sentence might improve flow: 'I will always wear safety shoes (安全靴) and maintain kitchen hygiene (衛生) because sanitation is my top priority.'",
+                "category": "Food/Tech"
+            },
+            "category": "Food/Tech"
         },
         {
             "timestamp": "2026-01-01T22:13:28.408265",
@@ -48,8 +56,10 @@
                 "grade": 7,
                 "word_count": 10,
                 "accuracy_feedback": "The statement's accuracy depends on the context. More information would be needed to fully assess its truthfulness. What 'they' refers to is unclear.",
-                "grammar_feedback": "The grammar is technically correct, but the semicolon is slightly unconventional in such a short sentence. A comma or simply separating it into two sentences would be more common and perhaps clearer. Using 'Yes, they are...' is better."
-            }
+                "grammar_feedback": "The grammar is technically correct, but the semicolon is slightly unconventional in such a short sentence. A comma or simply separating it into two sentences would be more common and perhaps clearer. Using 'Yes, they are...' is better.",
+                "category": "Food/Tech"
+            },
+            "category": "Food/Tech"
         },
         {
             "timestamp": "2026-01-02T10:47:38.997215",
@@ -58,8 +68,10 @@
                 "grade": 1,
                 "word_count": 3,
                 "accuracy_feedback": "The response 'Once a day' does not demonstrate any understanding of the provided guidelines on kitchen safety, hygiene standards, equipment safety, or food handling. There is no apparent connection to washing hands, food storage, uniform cleanliness, equipment training, FIFO principles, or any other concept from the study material.",
-                "grammar_feedback": "The grammar is correct, but the response is irrelevant to the task."
-            }
+                "grammar_feedback": "The grammar is correct, but the response is irrelevant to the task.",
+                "category": "Food/Tech"
+            },
+            "category": "Food/Tech"
         },
         {
             "timestamp": "2026-01-02T11:44:44.525076",
@@ -68,8 +80,10 @@
                 "grade": 4,
                 "word_count": 10,
                 "accuracy_feedback": "The response suggests an understanding that raw material quality is important, which indirectly relates to several points in the guidelines, such as 'FIFO', 'Check expiration dates', and 'Prevent cross-contamination'. However, it doesn't explicitly demonstrate comprehension of the listed safety guidelines. A better response would directly reference or elaborate on the provided points in relation to raw materials.",
-                "grammar_feedback": "The sentence is grammatically incomplete and uses 'may be' instead of 'maybe'. It lacks clarity and could be phrased more precisely, for example, 'Raw material quality is also important because...'"
-            }
+                "grammar_feedback": "The sentence is grammatically incomplete and uses 'may be' instead of 'maybe'. It lacks clarity and could be phrased more precisely, for example, 'Raw material quality is also important because...'",
+                "category": "Food/Tech"
+            },
+            "category": "Food/Tech"
         },
         {
             "timestamp": "2026-01-02T15:52:10.896794",
@@ -78,8 +92,10 @@
                 "grade": 3,
                 "word_count": 17,
                 "accuracy_feedback": "The response touches upon cleaning which relates to 'Keep work surfaces clean and sanitized' and 'Keep equipment clean and maintained', but it is too general and doesn't demonstrate a comprehensive understanding of the guidelines. It misses key elements like food handling, hygiene standards, and specific safety procedures like FIFO.",
-                "grammar_feedback": "The sentence is grammatically incorrect and difficult to understand. 'Floor, and working area cleaning, plus cleaning of every cooking are must be the items for cleaning' should be rewritten for clarity and correct grammar."
-            }
+                "grammar_feedback": "The sentence is grammatically incorrect and difficult to understand. 'Floor, and working area cleaning, plus cleaning of every cooking are must be the items for cleaning' should be rewritten for clarity and correct grammar.",
+                "category": "Food/Tech"
+            },
+            "category": "Food/Tech"
         },
         {
             "timestamp": "2026-01-02T15:56:55.456266",
@@ -93,8 +109,10 @@
                 "sensei_critique": "The response is far too brief and doesn't connect to any specific guideline provided. You need to elaborate and provide examples from the text to support your answers. Try to relate your answer to specific areas such as kitchen safety, hygiene, equipment, or food handling. Currently, there is no evidence of understanding of the material.",
                 "weakness_area": "Safety Knowledge",
                 "accuracy_feedback": "The response is too vague and doesn't demonstrate any understanding of the provided safety guidelines. It's unclear what 'difference' the student is referring to. Cleaning is mentioned as 'Keep work surfaces clean and sanitized' in Kitchen Safety Basics, and 'Keep equipment clean and maintained' in Equipment Safety, but the statement doesn't show comprehension.",
-                "grammar_feedback": "The grammar is technically correct, but the sentence lacks context and meaning in relation to the source material."
-            }
+                "grammar_feedback": "The grammar is technically correct, but the sentence lacks context and meaning in relation to the source material.",
+                "category": "Food/Tech"
+            },
+            "category": "Food/Tech"
         },
         {
             "timestamp": "2026-01-02T16:00:16.503056",
@@ -108,8 +126,10 @@
                 "sensei_critique": "The response shows a very basic, almost intuitive, understanding. To improve, focus on recalling and applying specific details from the provided guidelines. Try to elaborate on the basic idea and connect it to the core concepts of kitchen safety outlined in the material. Give examples, and demonstrate that you've processed the material into applicable knowledge.",
                 "weakness_area": "Safety Knowledge",
                 "accuracy_feedback": "The response is extremely vague and doesn't demonstrate a strong understanding of the provided safety guidelines. It needs to refer to specific safety practices related to food handling, hygiene, or equipment. For example, mentioning 'temperature control' or 'handwashing' would show better understanding.",
-                "grammar_feedback": "The sentence is grammatically correct but lacks context and detail. It would benefit from more precise language and supporting details."
-            }
+                "grammar_feedback": "The sentence is grammatically correct but lacks context and detail. It would benefit from more precise language and supporting details.",
+                "category": "Food/Tech"
+            },
+            "category": "Food/Tech"
         },
         {
             "timestamp": "2026-01-02T17:06:12.341890",
@@ -123,8 +143,10 @@
                 "sensei_critique": "The student's response is too general and lacks any specific connection to the provided safety guidelines. It shows a fundamental misunderstanding of what's important in kitchen safety. The student needs to review the material again and focus on understanding and recalling the specific rules and guidelines provided.",
                 "weakness_area": "Safety Knowledge",
                 "accuracy_feedback": "The response 'Cooking area' is extremely vague and does not demonstrate understanding of the provided safety guidelines. While the context relates to kitchens, it doesn't address any specific safety protocols outlined in the material, such as handwashing, equipment safety, or food handling procedures.",
-                "grammar_feedback": "The phrase 'Cooking area' is grammatically correct as a noun phrase."
-            }
+                "grammar_feedback": "The phrase 'Cooking area' is grammatically correct as a noun phrase.",
+                "category": "Food/Tech"
+            },
+            "category": "Food/Tech"
         },
         {
             "timestamp": "2026-01-02T17:08:53.126695",
@@ -138,7 +160,43 @@
                 "sensei_critique": "While mentioning 'seisō' shows you understand the importance of cleanliness, it doesn't cover the full scope of the safety guidelines. Try to include more details from the primary study material to demonstrate a more complete understanding of the concepts, such as food handling procedures or equipment safety.",
                 "weakness_area": "Safety Knowledge",
                 "accuracy_feedback": "\"seisō\" translates to \"cleaning\" or \"tidiness\" in Japanese. While cleanliness is important in kitchen safety (as outlined in sections on Hygiene Standards and Keeping Work Surfaces Clean), this response doesn't demonstrate comprehensive understanding of the broader N5 Vocational Safety Guidelines. It focuses on one aspect but ignores the rest (e.g., FIFO, Equipment Safety, temperature logs, etc.).",
-                "grammar_feedback": "The response is a single word. There are no grammatical errors in the Japanese word itself, but it lacks context and depth."
+                "grammar_feedback": "The response is a single word. There are no grammatical errors in the Japanese word itself, but it lacks context and depth.",
+                "category": "Food/Tech"
+            },
+            "category": "Food/Tech"
+        },
+        {
+            "timestamp": "2026-01-03T13:34:29.927304",
+            "lesson": "1. N5 Particles Wa Ga",
+            "session_id": "d05bf4bb-a619-41d7-9bff-b83a2eeaf93b",
+            "category": "Academic",
+            "scores": {
+                "grade": 1,
+                "word_count": 3,
+                "question_word_count": 0,
+                "question_duration": null,
+                "sensei_critique": "This answer misses the mark entirely. While grammatically sound, it provides no information relevant to the study material. Focus on actively recalling and summarizing key concepts from the guidelines, such as handwashing, equipment maintenance, and FIFO procedures. Try to think about *why* these guidelines are important, and *who* they are designed to protect.",
+                "weakness_area": "Safety Knowledge",
+                "accuracy_feedback": "The response 'For human beings' demonstrates no understanding of the provided safety guidelines. The guidelines are crucial for maintaining a safe and hygienic commercial kitchen environment. The answer does not reflect any understanding of kitchen safety basics, hygiene standards, equipment safety, or food handling procedures.",
+                "grammar_feedback": "The grammar is technically correct, but the response is contextually irrelevant.",
+                "category": "Academic"
+            }
+        },
+        {
+            "timestamp": "2026-01-03T13:35:06.233863",
+            "lesson": "1. N5 Particles Wa Ga",
+            "session_id": "403dc947-dd21-4c23-a74a-fb96d5507fbf",
+            "category": "Academic",
+            "scores": {
+                "grade": 1,
+                "word_count": 3,
+                "question_word_count": 0,
+                "question_duration": null,
+                "sensei_critique": "This response unfortunately misses the mark entirely. The aim was to show an understanding of the provided kitchen safety guidelines. Instead, the response is too general and doesn't engage with the specific points of the material. Focus on recalling and relating the key concepts such as FIFO, temperature logs, and handwashing procedures.",
+                "weakness_area": "Safety Knowledge",
+                "accuracy_feedback": "The response 'For human beings' doesn't demonstrate any understanding of the provided kitchen safety guidelines. The guidelines are for ensuring safe food preparation and handling practices in a commercial kitchen, not simply stating they are for people. It misses all key aspects related to kitchen safety basics, hygiene standards, equipment safety, and food handling.",
+                "grammar_feedback": "The phrase is grammatically correct in isolation, but lacks context and relevance.",
+                "category": "Academic"
             }
         }
     ],
@@ -159,7 +217,8 @@
                         "sensei_critique": "The response is far too brief and doesn't connect to any specific guideline provided. You need to elaborate and provide examples from the text to support your answers. Try to relate your answer to specific areas such as kitchen safety, hygiene, equipment, or food handling. Currently, there is no evidence of understanding of the material.",
                         "weakness_area": "Safety Knowledge",
                         "accuracy_feedback": "The response is too vague and doesn't demonstrate any understanding of the provided safety guidelines. It's unclear what 'difference' the student is referring to. Cleaning is mentioned as 'Keep work surfaces clean and sanitized' in Kitchen Safety Basics, and 'Keep equipment clean and maintained' in Equipment Safety, but the statement doesn't show comprehension.",
-                        "grammar_feedback": "The grammar is technically correct, but the sentence lacks context and meaning in relation to the source material."
+                        "grammar_feedback": "The grammar is technically correct, but the sentence lacks context and meaning in relation to the source material.",
+                        "category": "Food/Tech"
                     }
                 }
             ],
@@ -181,7 +240,8 @@
                         "sensei_critique": "The response shows a very basic, almost intuitive, understanding. To improve, focus on recalling and applying specific details from the provided guidelines. Try to elaborate on the basic idea and connect it to the core concepts of kitchen safety outlined in the material. Give examples, and demonstrate that you've processed the material into applicable knowledge.",
                         "weakness_area": "Safety Knowledge",
                         "accuracy_feedback": "The response is extremely vague and doesn't demonstrate a strong understanding of the provided safety guidelines. It needs to refer to specific safety practices related to food handling, hygiene, or equipment. For example, mentioning 'temperature control' or 'handwashing' would show better understanding.",
-                        "grammar_feedback": "The sentence is grammatically correct but lacks context and detail. It would benefit from more precise language and supporting details."
+                        "grammar_feedback": "The sentence is grammatically correct but lacks context and detail. It would benefit from more precise language and supporting details.",
+                        "category": "Food/Tech"
                     }
                 }
             ],
@@ -203,7 +263,8 @@
                         "sensei_critique": "The student's response is too general and lacks any specific connection to the provided safety guidelines. It shows a fundamental misunderstanding of what's important in kitchen safety. The student needs to review the material again and focus on understanding and recalling the specific rules and guidelines provided.",
                         "weakness_area": "Safety Knowledge",
                         "accuracy_feedback": "The response 'Cooking area' is extremely vague and does not demonstrate understanding of the provided safety guidelines. While the context relates to kitchens, it doesn't address any specific safety protocols outlined in the material, such as handwashing, equipment safety, or food handling procedures.",
-                        "grammar_feedback": "The phrase 'Cooking area' is grammatically correct as a noun phrase."
+                        "grammar_feedback": "The phrase 'Cooking area' is grammatically correct as a noun phrase.",
+                        "category": "Food/Tech"
                     }
                 },
                 {
@@ -217,11 +278,58 @@
                         "sensei_critique": "While mentioning 'seisō' shows you understand the importance of cleanliness, it doesn't cover the full scope of the safety guidelines. Try to include more details from the primary study material to demonstrate a more complete understanding of the concepts, such as food handling procedures or equipment safety.",
                         "weakness_area": "Safety Knowledge",
                         "accuracy_feedback": "\"seisō\" translates to \"cleaning\" or \"tidiness\" in Japanese. While cleanliness is important in kitchen safety (as outlined in sections on Hygiene Standards and Keeping Work Surfaces Clean), this response doesn't demonstrate comprehensive understanding of the broader N5 Vocational Safety Guidelines. It focuses on one aspect but ignores the rest (e.g., FIFO, Equipment Safety, temperature logs, etc.).",
-                        "grammar_feedback": "The response is a single word. There are no grammatical errors in the Japanese word itself, but it lacks context and depth."
+                        "grammar_feedback": "The response is a single word. There are no grammatical errors in the Japanese word itself, but it lacks context and depth.",
+                        "category": "Food/Tech"
                     }
                 }
             ],
             "last_updated": "2026-01-02T17:08:53.126695"
+        },
+        "d05bf4bb-a619-41d7-9bff-b83a2eeaf93b": {
+            "session_start": "2026-01-03T13:34:29.927304",
+            "session_total_words": 0,
+            "session_total_time": 0.0,
+            "questions": [
+                {
+                    "timestamp": "2026-01-03T13:34:29.927304",
+                    "lesson": "1. N5 Particles Wa Ga",
+                    "scores": {
+                        "grade": 1,
+                        "word_count": 3,
+                        "question_word_count": 0,
+                        "question_duration": null,
+                        "sensei_critique": "This answer misses the mark entirely. While grammatically sound, it provides no information relevant to the study material. Focus on actively recalling and summarizing key concepts from the guidelines, such as handwashing, equipment maintenance, and FIFO procedures. Try to think about *why* these guidelines are important, and *who* they are designed to protect.",
+                        "weakness_area": "Safety Knowledge",
+                        "accuracy_feedback": "The response 'For human beings' demonstrates no understanding of the provided safety guidelines. The guidelines are crucial for maintaining a safe and hygienic commercial kitchen environment. The answer does not reflect any understanding of kitchen safety basics, hygiene standards, equipment safety, or food handling procedures.",
+                        "grammar_feedback": "The grammar is technically correct, but the response is contextually irrelevant.",
+                        "category": "Academic"
+                    }
+                }
+            ],
+            "last_updated": "2026-01-03T13:34:29.927304"
+        },
+        "403dc947-dd21-4c23-a74a-fb96d5507fbf": {
+            "session_start": "2026-01-03T13:35:06.233863",
+            "session_total_words": 0,
+            "session_total_time": 0.0,
+            "questions": [
+                {
+                    "timestamp": "2026-01-03T13:35:06.233863",
+                    "lesson": "1. N5 Particles Wa Ga",
+                    "scores": {
+                        "grade": 1,
+                        "word_count": 3,
+                        "question_word_count": 0,
+                        "question_duration": null,
+                        "sensei_critique": "This response unfortunately misses the mark entirely. The aim was to show an understanding of the provided kitchen safety guidelines. Instead, the response is too general and doesn't engage with the specific points of the material. Focus on recalling and relating the key concepts such as FIFO, temperature logs, and handwashing procedures.",
+                        "weakness_area": "Safety Knowledge",
+                        "accuracy_feedback": "The response 'For human beings' doesn't demonstrate any understanding of the provided kitchen safety guidelines. The guidelines are for ensuring safe food preparation and handling practices in a commercial kitchen, not simply stating they are for people. It misses all key aspects related to kitchen safety basics, hygiene standards, equipment safety, and food handling.",
+                        "grammar_feedback": "The phrase is grammatically correct in isolation, but lacks context and relevance.",
+                        "category": "Academic"
+                    }
+                }
+            ],
+            "last_updated": "2026-01-03T13:35:06.233863"
         }
     }
 }
