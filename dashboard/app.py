@@ -2542,6 +2542,7 @@ def show_progress_dashboard():
                                 label="📥 Download Sensei Performance Report",
                                 data=pdf_bytes,
                                 file_name=f"sensei_report_{candidate_id}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf",
+                                # Fix datetime import issue - ensure datetime is imported from datetime module
                                 mime="application/pdf",
                                 type="primary",
                                 width='stretch'
@@ -3842,11 +3843,96 @@ def show_academic_hub():
         
         # Store transcript in session state for chat interface
         st.session_state.current_lesson_transcript = current_lesson_transcript
+        st.session_state.academic_current_lesson_transcript = current_lesson_transcript
+        st.session_state.academic_current_lesson_name = lesson_name
         
-        # Persistent Greeting: Static greeting is now displayed in chat sidebar, no auto-trigger needed [cite: 2025-12-20, 2025-12-21]
+        # Main content: Display transcript FIRST (matching Care-giving Hub gold standard) [cite: 2025-12-21]
+        st.subheader(f"📄 {lesson_name}")
+        with st.expander("📋 View Transcript", expanded=True):
+            st.markdown(current_lesson_transcript)
         
-        # Chat interface (mirroring Video Hub exactly) [cite: 2025-12-21]
-        if sensei_chat_active:
+        # Chat interface using render_unified_chat_interface (matching Care-giving Hub gold standard) [cite: 2025-12-21]
+        st.markdown("---")
+        # Use render_unified_chat_interface to restore Start, Next, and Stop buttons [cite: 2025-12-21]
+        render_unified_chat_interface(
+            chat_history_key='academic_chat_history',
+            transcript=current_lesson_transcript,
+            lesson_name=lesson_name,
+            track="Academic",
+            current_page="📖 Academic Hub",
+            sensei_name="JLPT Sensei",
+            placeholder_text="Type your message to JLPT Sensei..."
+        )
+        
+        # Display timer and phase indicator (if video-based lesson)
+        if video_path and video_path.exists():
+            # Initialize video timestamp tracking
+            if 'academic_video_start_time' not in st.session_state:
+                st.session_state.academic_video_start_time = time.time()
+            
+            # Calculate timer_elapsed (maps to video timestamp)
+            timer_elapsed = int(time.time() - st.session_state.academic_video_start_time)
+            phase_indicator = "Evaluator" if timer_elapsed >= 180 else "Helpful Assistant"
+            st.caption(f"⏱️ Timer: {timer_elapsed}s | Phase: {phase_indicator}")
+        
+        # Mastery Score Preview (mirroring Video Hub)
+        st.markdown("---")
+        st.subheader("📊 Mastery Score Preview")
+        mastery_scores, _ = calculate_mastery_scores(candidate_id)
+        if "Academic" in mastery_scores:
+            track_scores = mastery_scores["Academic"]
+            for skill, score in track_scores.items():
+                st.metric(
+                    label=skill,
+                    value=f"{score:.1f}%",
+                    help=f"Current mastery level for {skill} in Academic track"
+                )
+        else:
+            st.info("No mastery scores yet. Start chatting with Sensei to earn points!")
+        
+        # Final Competency Submission - only show after at least one chat interaction [cite: 2025-12-21]
+        has_user_interaction = any(msg.get('role') == 'user' for msg in st.session_state.get('academic_chat_history', []))
+        if has_user_interaction:
+            st.markdown("---")
+            with st.expander("📝 Final Competency Submission", expanded=False):
+                st.markdown("**Submit your final response for competency assessment:**")
+                
+                if 'academic_competency_response' not in st.session_state:
+                    st.session_state.academic_competency_response = ""
+                
+                final_response = st.text_area(
+                    "Your final competency response:",
+                    value=st.session_state.academic_competency_response,
+                    key="academic_final_response",
+                    height=300
+                )
+                
+                word_count = len(final_response.split()) if final_response else 0
+                st.caption(f"Word count: {word_count} / 3,000")
+                
+                if st.button("🚀 Submit to Sensei", key="academic_submit", type="primary"):
+                    if final_response:
+                        try:
+                            from agency.training_agent.competency_grading_tool import CompetencyGradingTool
+                            grading_tool = CompetencyGradingTool()
+                            
+                            grading_result = grading_tool.run(
+                                response=final_response,
+                                candidate_id=candidate_id,
+                                track="Academic",
+                                language="en",
+                                lesson_name=lesson_name,
+                                session_id=st.session_state.get('academic_session_id', '')
+                            )
+                            
+                            st.success("✅ Assessment Complete!")
+                            if isinstance(grading_result, dict):
+                                st.metric("Overall Grade", f"{grading_result.get('grade', 'N/A')}/10")
+                        except Exception as e:
+                            st.error(f"Error during grading: {str(e)}")
+        
+        # Legacy chat interface code removed - replaced with render_unified_chat_interface above
+        if False:  # Disable old chat interface
             st.markdown("---")
             st.subheader("💬 Chat with JLPT Sensei")
             
@@ -4463,7 +4549,7 @@ def show_food_tech_hub():
         # Start Socratic Discussion button - prominently displayed after transcript [cite: 2025-12-21]
         st.markdown("---")
         if len(st.session_state.get('food_tech_chat_history', [])) == 0:
-            if st.button("💬 Start Socratic Discussion", key="start_food_tech_discussion", type="primary", use_container_width=True):
+            if st.button("💬 Start Socratic Discussion", key="start_food_tech_discussion_main", type="primary", use_container_width=True):
                 # Initialize chat history if needed
                 if 'food_tech_chat_history' not in st.session_state:
                     st.session_state.food_tech_chat_history = []
