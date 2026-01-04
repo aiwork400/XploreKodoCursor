@@ -1280,6 +1280,16 @@ def render_unified_chat_interface(
     
     chat_history = st.session_state[chat_history_key]
     
+    # Initialize track-specific audio state variables [cite: 2025-12-21]
+    track_safe = track.lower().replace('/', '_').replace('-', '_')
+    audio_buffer_key = f"{track_safe}_audio_buffer"
+    audio_hash_key = f"{track_safe}_last_audio_hash"
+    
+    if audio_buffer_key not in st.session_state:
+        st.session_state[audio_buffer_key] = None
+    if audio_hash_key not in st.session_state:
+        st.session_state[audio_hash_key] = None
+    
     # Display chat history
     if chat_history:
         for message in chat_history:
@@ -1292,7 +1302,7 @@ def render_unified_chat_interface(
     
     # Start discussion button (only if chat is empty)
     if len(chat_history) == 0:
-        if st.button("💬 Start Socratic Discussion", key=f"start_{track.lower().replace('/', '_')}_discussion", type="primary", use_container_width=True):
+        if st.button("💬 Start Socratic Discussion", key=f"start_{track_safe}_discussion", type="primary", use_container_width=True):
             # Dynamic Syllabus Trigger: Generate track-specific Socratic opening question [cite: 2025-12-20, 2025-12-21]
             initial_greeting_prompt = f"""Greeting: English first, then Japanese, then Nepali. Then ask one Socratic question about "{lesson_name}" based on the transcript.
 
@@ -1316,37 +1326,186 @@ def render_unified_chat_interface(
                 })
                 st.rerun()
     
-    # Chat input
-    user_message = st.chat_input(placeholder_text)
-    if user_message:
-        # Add user message to chat history
-        chat_history.append({
-            'role': 'user',
-            'content': user_message
-        })
-        
-        # Get Sensei response using AAI Conversation logic
-        sensei_response = get_sensei_response(
-            user_input=user_message,
-            conversation_history=chat_history,
-            transcript=transcript,
-            timer_elapsed=0,
-            track=track,
-            current_page=current_page
-        )
-        
-        # Add Sensei response to chat history
-        chat_history.append({
-            'role': 'sensei',
-            'content': sensei_response
-        })
-        
-        # Update session state
-        st.session_state[chat_history_key] = chat_history
-        st.rerun()
+    # Input Method Toggle (Text or Audio) - Ported from Academic Hub [cite: 2025-12-21]
+    input_method = st.radio(
+        "Input Method:",
+        options=["text", "audio"],
+        format_func=lambda x: "⌨️ Text" if x == "text" else "🎤 Audio",
+        key=f"{track_safe}_input_method",
+        horizontal=True,
+        help="Choose how to interact with Sensei: Text input or Audio recording"
+    )
     
-    # Navigation Controls: Add control buttons for vocational tracks (Food/Tech and Care-giving) [cite: 2025-12-21]
-    if track in ["Food/Tech", "Care-giving"] and len(chat_history) > 0:
+    # Chat input for user messages (Text mode)
+    if input_method == "text":
+        user_message = st.chat_input(placeholder_text)
+        if user_message:
+            # Add user message to chat history
+            chat_history.append({
+                'role': 'user',
+                'content': user_message
+            })
+            
+            # Get Sensei response using AAI Conversation logic
+            sensei_response = get_sensei_response(
+                user_input=user_message,
+                conversation_history=chat_history,
+                transcript=transcript,
+                timer_elapsed=0,
+                track=track,
+                current_page=current_page
+            )
+            
+            # Add Sensei response to chat history
+            chat_history.append({
+                'role': 'sensei',
+                'content': sensei_response
+            })
+            
+            # Update session state
+            st.session_state[chat_history_key] = chat_history
+            st.rerun()
+    else:
+        # Audio mode - mic_recorder (Ported from Academic Hub) [cite: 2025-12-21]
+        user_message = None
+        try:
+            from streamlit_mic_recorder import mic_recorder
+            
+            st.markdown("**🎤 Voice Input:**")
+            # Recording Indicator: Add key and styling consistent with Academic Hub [cite: 2025-12-21]
+            audio = mic_recorder(
+                start_prompt="🎤 Start Recording",
+                stop_prompt="🛑 Stop & Transcribe",
+                key=f"{track_safe}_mic",  # Track-specific key for mic_recorder [cite: 2025-12-21]
+                use_container_width=True
+            )
+            
+            # Microphone Status: Recording indicator placed directly above chat input area [cite: 2025-12-21]
+            # Check if mic_recorder is currently recording
+            if audio is not None:
+                # If audio exists, it means recording has completed
+                if isinstance(audio, dict) and 'bytes' in audio:
+                    st.success("✅ Recording complete! Processing...")
+                elif isinstance(audio, dict):
+                    # Recording might be in progress - show status directly above chat input
+                    st.info("🎙️ Recording...")  # Microphone Status: Directly above chat input [cite: 2025-12-21]
+            else:
+                # No recording state - show ready state
+                st.caption("💡 Click the button above to start recording")
+            
+            # Process audio when recording stops (with MD5 hash check) [cite: 2025-12-21]
+            # Siloed Transcription: Ensure audio is appended to track-specific chat history [cite: 2025-12-21]
+            if audio and isinstance(audio, dict) and 'bytes' in audio:
+                # Audio Input Hook: Store audio data in track-specific buffer [cite: 2025-12-21]
+                st.session_state[audio_buffer_key] = audio['bytes']
+                
+                # Check if this is new audio (not already processed) - MD5 hash check
+                import hashlib
+                audio_hash = hashlib.md5(audio['bytes']).hexdigest()
+                
+                # Allow processing if hash is None (first recording) or different from last
+                if st.session_state[audio_hash_key] is None or audio_hash != st.session_state[audio_hash_key]:
+                    st.session_state[audio_hash_key] = audio_hash
+                    
+                    # Trilingual Whisper Config: Use same transcription as Academic hub [cite: 2025-12-20, 2025-12-21]
+                    try:
+                        # Show spinner during transcription
+                        with st.spinner("🎤 Transcribing with Whisper..."):
+                            # Transcribe audio using Gemini 2.0 Flash (multilingual support: English, Japanese, Nepali)
+                            # Trilingual Whisper Config: Same parameters as Academic hub [cite: 2025-12-20, 2025-12-21]
+                            transcribed_text = transcribe_audio_with_gemini(st.session_state[audio_buffer_key])
+                        
+                        # Siloed Transcription: Append to track-specific chat history [cite: 2025-12-21]
+                        if transcribed_text and not transcribed_text.startswith("Error"):
+                            # Add transcribed text to chat history
+                            chat_history.append({
+                                'role': 'user',
+                                'content': transcribed_text
+                            })
+                            
+                            st.success("✅ Speech-to-Text complete!")  # Link to UI: Display success message [cite: 2025-12-21]
+                            
+                            # Get Sensei response immediately with track-specific persona
+                            # Transcript-to-Sensei: Ensure transcript is passed as system prompt context [cite: 2025-12-20]
+                            sensei_response = get_sensei_response(
+                                user_input=transcribed_text,
+                                conversation_history=chat_history,
+                                transcript=transcript,  # Transcript passed as system context [cite: 2025-12-20]
+                                timer_elapsed=0,
+                                track=track,
+                                current_page=current_page
+                            )
+                            
+                            # Add Sensei response to chat history
+                            chat_history.append({
+                                'role': 'sensei',
+                                'content': sensei_response
+                            })
+                            
+                            # Update session state
+                            st.session_state[chat_history_key] = chat_history
+                            
+                            # Clear audio buffer after processing
+                            st.session_state[audio_buffer_key] = None
+                            
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Transcription failed: {transcribed_text}")
+                    except Exception as e:
+                        st.error(f"❌ Error during transcription: {str(e)}")
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.error(f"Transcription error in {track}: {e}")
+                        
+        except ImportError:
+            st.warning("⚠️ streamlit-mic-recorder not installed. Please install it: pip install streamlit-mic-recorder")
+            # Fallback to text input
+            user_message = st.chat_input(placeholder_text)
+            if user_message:
+                chat_history.append({
+                    'role': 'user',
+                    'content': user_message
+                })
+                sensei_response = get_sensei_response(
+                    user_input=user_message,
+                    conversation_history=chat_history,
+                    transcript=transcript,
+                    timer_elapsed=0,
+                    track=track,
+                    current_page=current_page
+                )
+                chat_history.append({
+                    'role': 'sensei',
+                    'content': sensei_response
+                })
+                st.session_state[chat_history_key] = chat_history
+                st.rerun()
+        except Exception as e:
+            st.warning(f"⚠️ Audio recording error: {str(e)}")
+            # Fallback to text input
+            user_message = st.chat_input(placeholder_text)
+            if user_message:
+                chat_history.append({
+                    'role': 'user',
+                    'content': user_message
+                })
+                sensei_response = get_sensei_response(
+                    user_input=user_message,
+                    conversation_history=chat_history,
+                    transcript=transcript,
+                    timer_elapsed=0,
+                    track=track,
+                    current_page=current_page
+                )
+                chat_history.append({
+                    'role': 'sensei',
+                    'content': sensei_response
+                })
+                st.session_state[chat_history_key] = chat_history
+                st.rerun()
+    
+    # Navigation Controls: Add control buttons for all tracks (Academic, Food/Tech, Care-giving) [cite: 2025-12-21]
+    if track in ["Academic", "Food/Tech", "Care-giving"] and len(chat_history) > 0:
         # Only show controls if there's at least one message in chat history
         col1, col2 = st.columns(2)
         
@@ -1544,6 +1703,65 @@ def update_mastery_scores_from_grading(candidate_id: str, track: str, grading_re
             
         finally:
             db.close()
+        
+        # Also update user_progress.json with track-specific mastery scores [cite: 2025-12-21]
+        try:
+            import os
+            from pathlib import Path
+            
+            progress_file = Path(__file__).parent.parent / "assets" / "user_progress.json"
+            
+            if progress_file.exists():
+                with open(progress_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            else:
+                data = {
+                    "total_word_count": 0,
+                    "lesson_history": [],
+                    "sessions": {},
+                    "track_mastery": {
+                        "Academic": {"vocab": 0, "tone": 0, "logic": 0},
+                        "Food/Tech": {"vocab": 0, "tone": 0, "logic": 0},
+                        "Care-giving": {"vocab": 0, "tone": 0, "logic": 0}
+                    }
+                }
+            
+            # Initialize track_mastery if it doesn't exist
+            if "track_mastery" not in data:
+                data["track_mastery"] = {
+                    "Academic": {"vocab": 0, "tone": 0, "logic": 0},
+                    "Food/Tech": {"vocab": 0, "tone": 0, "logic": 0},
+                    "Care-giving": {"vocab": 0, "tone": 0, "logic": 0}
+                }
+            
+            # Ensure track exists
+            if track not in data["track_mastery"]:
+                data["track_mastery"][track] = {"vocab": 0, "tone": 0, "logic": 0}
+            
+            # Map database skill names to JSON keys
+            skill_mapping = {
+                "Vocabulary": "vocab",
+                "Tone/Honorifics": "tone",
+                "Contextual Logic": "logic"
+            }
+            
+            # Update track_mastery from database mastery_scores
+            if track in mastery_scores:
+                for skill_name, skill_key in skill_mapping.items():
+                    if skill_name in mastery_scores[track]:
+                        data["track_mastery"][track][skill_key] = mastery_scores[track][skill_name]
+            
+            # Ensure assets directory exists
+            os.makedirs(progress_file.parent, exist_ok=True)
+            
+            # Save updated data
+            with open(progress_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4, ensure_ascii=False)
+                
+        except Exception as json_error:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error updating user_progress.json: {json_error}")
             
     except Exception as e:
         import logging
@@ -2316,7 +2534,7 @@ def show_progress_dashboard():
     st.header("📊 Progress Dashboard - Student Performance Heatmap")
     
     # Data Source: Load mastery stats from user_progress.json [cite: 2025-12-21]
-    total_word_count, lesson_history = load_mastery_stats()
+    total_word_count, lesson_history, track_mastery_json = load_mastery_stats()
     
     # Cross-Hub Progress Update: Calculate category-specific word counts [cite: 2025-12-21]
     academic_word_count = sum(
@@ -2429,9 +2647,27 @@ def show_progress_dashboard():
         st.info("Please select or enter a candidate ID to view progress.")
         return
     
-    # Calculate mastery scores
+    # Calculate mastery scores - merge database and JSON sources [cite: 2025-12-21]
     with st.spinner("Calculating mastery scores..."):
         mastery_scores, last_updated = calculate_mastery_scores(candidate_id)
+        
+        # Waking Up the Visuals: Merge with track_mastery from user_progress.json [cite: 2025-12-21]
+        # Map JSON keys to database skill names
+        skill_mapping = {
+            "vocab": "Vocabulary",
+            "tone": "Tone/Honorifics",
+            "logic": "Contextual Logic"
+        }
+        
+        # Update mastery_scores with track_mastery from JSON (JSON takes precedence if available)
+        for track in ["Academic", "Food/Tech", "Care-giving"]:
+            if track in track_mastery_json:
+                track_data = track_mastery_json[track]
+                for json_key, db_skill in skill_mapping.items():
+                    json_value = track_data.get(json_key, 0)
+                    # Use JSON value if it's higher than database value, or if database value is 0
+                    if json_value > 0 and (mastery_scores[track].get(db_skill, 0) == 0 or json_value > mastery_scores[track].get(db_skill, 0)):
+                        mastery_scores[track][db_skill] = float(json_value)
     
     # Display Last Evaluated timestamp
     if last_updated:
@@ -2466,9 +2702,33 @@ def show_progress_dashboard():
     tracks = ["Care-giving", "Academic", "Food/Tech"]
     track_icons = {"Care-giving": "🏥", "Academic": "📖", "Food/Tech": "🍜"}
     
+    # Waking Up Mastery Scores: Pull from track_mastery_json with fallback to database [cite: 2025-12-21]
+    skill_mapping = {
+        "vocab": "Vocabulary",
+        "tone": "Tone/Honorifics",
+        "logic": "Contextual Logic"
+    }
+    
     for i, track in enumerate(tracks):
         with [col1, col2, col3][i]:
-            avg_score = sum(mastery_scores[track].values()) / len(mastery_scores[track]) if mastery_scores[track] else 0
+            # Calculate average from track_mastery_json if available, otherwise use database scores
+            track_scores = []
+            
+            # First, try to get from track_mastery_json
+            if track in track_mastery_json:
+                track_data = track_mastery_json[track]
+                for json_key, db_skill in skill_mapping.items():
+                    json_value = track_data.get(json_key, 0)
+                    if json_value > 0:
+                        track_scores.append(float(json_value))
+            
+            # If JSON is empty or has no scores, fall back to database mastery_scores
+            if not track_scores and track in mastery_scores:
+                track_scores = [float(score) for score in mastery_scores[track].values() if score > 0]
+            
+            # Calculate average
+            avg_score = sum(track_scores) / len(track_scores) if track_scores else 0.0
+            
             st.metric(
                 f"{track_icons[track]} {track}",
                 f"{avg_score:.1f}%",
@@ -2480,11 +2740,10 @@ def show_progress_dashboard():
     # Create heatmap visualization
     st.subheader("🔥 Performance Heatmap")
     
-    # Verification: Show that we're pulling from mastery_scores JSON
-    if "Food/Tech" in mastery_scores and "Vocabulary" in mastery_scores["Food/Tech"]:
-        vocab_score = mastery_scores["Food/Tech"]["Vocabulary"]
-        if vocab_score > 0:
-            st.success(f"✅ Vocabulary score from Video Hub: {vocab_score:.1f}% (pulled from CurriculumProgress.mastery_scores JSON)")
+    # Verification: Show that we're pulling from track_mastery in user_progress.json [cite: 2025-12-21]
+    if "Food/Tech" in track_mastery_json and track_mastery_json["Food/Tech"].get("vocab", 0) > 0:
+        vocab_score = track_mastery_json["Food/Tech"]["vocab"]
+        st.success(f"✅ Vocabulary score from user_progress.json: {vocab_score:.1f}% (track_mastery['Food/Tech']['vocab'])")
     
     if not PLOTLY_AVAILABLE:
         st.warning("Plotly is not available. Please install it with: pip install plotly")
@@ -2554,6 +2813,82 @@ def show_progress_dashboard():
         )
         
         st.plotly_chart(fig_radar, width='stretch')
+    
+    # Session Heatmap by Date and Track [cite: 2025-12-21]
+    if lesson_history:
+        st.markdown("---")
+        st.subheader("📅 Session Activity Heatmap by Date and Track")
+        
+        # Count sessions per date and track
+        from collections import defaultdict
+        from datetime import datetime
+        
+        date_track_counts = defaultdict(lambda: defaultdict(int))
+        
+        for entry in lesson_history:
+            timestamp_str = entry.get("timestamp", "")
+            category = entry.get("category", "Academic")
+            
+            if timestamp_str:
+                try:
+                    # Parse timestamp
+                    if isinstance(timestamp_str, str):
+                        # Try ISO format first
+                        try:
+                            dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                        except:
+                            # Try other formats
+                            try:
+                                dt = datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%S.%f")
+                            except:
+                                dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+                    else:
+                        dt = timestamp_str
+                    
+                    # Get date only
+                    date_key = dt.date().isoformat() if hasattr(dt, 'date') else str(dt)[:10]
+                    date_track_counts[date_key][category] += 1
+                except Exception as e:
+                    # Skip entries with invalid timestamps
+                    continue
+        
+        if date_track_counts:
+            # Create heatmap data
+            dates = sorted(date_track_counts.keys())
+            tracks = ["Academic", "Food/Tech", "Care-giving"]
+            
+            z_data = []
+            for track in tracks:
+                row = [date_track_counts[date].get(track, 0) for date in dates]
+                z_data.append(row)
+            
+            if PLOTLY_AVAILABLE:
+                fig_date = go.Figure(data=go.Heatmap(
+                    z=z_data,
+                    x=dates,
+                    y=tracks,
+                    colorscale='Blues',
+                    text=[[str(val) if val > 0 else '' for val in row] for row in z_data],
+                    texttemplate='%{text}',
+                    textfont={"size": 10, "color": "white"},
+                    colorbar=dict(title=dict(text="Sessions", side="right"))
+                ))
+                
+                fig_date.update_layout(
+                    title="Daily Session Count by Track",
+                    xaxis_title="Date",
+                    yaxis_title="Track",
+                    width=800,
+                    height=300,
+                    font=dict(size=10)
+                )
+                
+                st.plotly_chart(fig_date, width='stretch')
+            else:
+                # Fallback table
+                date_track_df = pd.DataFrame(date_track_counts).T
+                date_track_df = date_track_df.reindex(columns=tracks, fill_value=0)
+                st.dataframe(date_track_df, use_container_width=True)
     
     st.markdown("---")
     
@@ -3532,12 +3867,13 @@ def load_video_lessons(track: str, language: str) -> list[dict]:
 def load_mastery_stats():
     """
     UI Sync: Load mastery stats from persistent JSON file [cite: 2025-12-21]
-    Data Source: Returns total_word_count and lesson_history from assets/user_progress.json [cite: 2025-12-21]
+    Data Source: Returns total_word_count, lesson_history, and track_mastery from assets/user_progress.json [cite: 2025-12-21]
     
     Returns:
-        tuple: (total_word_count, lesson_history)
+        tuple: (total_word_count, lesson_history, track_mastery)
             - total_word_count: int - Total words learned
             - lesson_history: list - List of lesson entries with timestamp, lesson, and scores
+            - track_mastery: dict - Track-specific mastery scores from user_progress.json
     """
     import json
     import os
@@ -3551,10 +3887,23 @@ def load_mastery_stats():
                 data = json.load(f)
                 total_word_count = data.get("total_word_count", 0)
                 lesson_history = data.get("lesson_history", [])
-                return total_word_count, lesson_history
+                track_mastery = data.get("track_mastery", {
+                    "Academic": {"vocab": 0, "tone": 0, "logic": 0},
+                    "Food/Tech": {"vocab": 0, "tone": 0, "logic": 0},
+                    "Care-giving": {"vocab": 0, "tone": 0, "logic": 0}
+                })
+                return total_word_count, lesson_history, track_mastery
         except (json.JSONDecodeError, KeyError, IOError):
-            return 0, []
-    return 0, []
+            return 0, [], {
+                "Academic": {"vocab": 0, "tone": 0, "logic": 0},
+                "Food/Tech": {"vocab": 0, "tone": 0, "logic": 0},
+                "Care-giving": {"vocab": 0, "tone": 0, "logic": 0}
+            }
+    return 0, [], {
+        "Academic": {"vocab": 0, "tone": 0, "logic": 0},
+        "Food/Tech": {"vocab": 0, "tone": 0, "logic": 0},
+        "Care-giving": {"vocab": 0, "tone": 0, "logic": 0}
+    }
 
 
 def extract_syllabus_from_transcript(transcript: str, lesson_name: str) -> tuple[str, str]:
@@ -3962,50 +4311,7 @@ def show_academic_hub():
             placeholder_text="Type your message to JLPT Sensei..."
         )
         
-        # Navigation Controls: Add control buttons to Academic Hub main content area [cite: 2025-12-21]
-        academic_chat_history = st.session_state.get('academic_chat_history', [])
-        if len(academic_chat_history) > 0:
-            st.markdown("---")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if st.button("➡️ Next Question", key="next_question_academic_main", use_container_width=True):
-                    # Generate follow-up question based on conversation history and transcript [cite: 2025-12-20, 2025-12-21]
-                    next_question_prompt = f"""Based on the conversation history below, generate a follow-up Socratic question that:
-1. Builds on the student's previous responses
-2. Deepens understanding of the topic from the transcript
-3. Maintains the trilingual format (English, Japanese, Nepali)
-
-**Conversation History:**
-{chr(10).join([f"{msg['role'].title()}: {msg['content']}" for msg in academic_chat_history[-4:]])}
-
-**Lesson Transcript:**
-{current_lesson_transcript}
-
-**Your Response (trilingual follow-up Socratic question):**
-"""
-                    with st.spinner("🎓 JLPT Sensei is preparing the next question..."):
-                        next_question = get_sensei_response(
-                            user_input=next_question_prompt,
-                            conversation_history=academic_chat_history,
-                            transcript=current_lesson_transcript,
-                            timer_elapsed=0,
-                            track="Academic",
-                            current_page="📖 Academic Hub"
-                        )
-                        # Append new question to chat history [cite: 2025-12-21]
-                        academic_chat_history.append({
-                            'role': 'sensei',
-                            'content': next_question
-                        })
-                        st.session_state.academic_chat_history = academic_chat_history
-                        st.rerun()
-            
-            with col2:
-                if st.button("⏹️ Stop Session", key="stop_session_academic_main", use_container_width=True):
-                    # Mark session as stopped to allow jumping to Final Competency Submission [cite: 2025-12-21]
-                    st.session_state.academic_session_stopped = True
-                    st.rerun()
+        # Navigation Controls are now handled by render_unified_chat_interface [cite: 2025-12-21]
         
         # Display timer and phase indicator (if video-based lesson)
         if video_path and video_path.exists():
@@ -4057,6 +4363,7 @@ def show_academic_hub():
                             # Update mastery scores in database based on grading result [cite: 2025-12-21]
                             if isinstance(grading_result, dict):
                                 update_mastery_scores_from_grading(candidate_id, "Academic", grading_result)
+                                st.success("✅ Mastery updated for Academic Hub")
                             
                             st.success("✅ Assessment Complete!")
                             if isinstance(grading_result, dict):
@@ -4064,484 +4371,7 @@ def show_academic_hub():
                         except Exception as e:
                             st.error(f"Error during grading: {str(e)}")
         
-        # Legacy chat interface code removed - replaced with render_unified_chat_interface above
-        if False:  # Disable old chat interface
-            st.markdown("---")
-            st.subheader("💬 Chat with JLPT Sensei")
-            
-            # Initialize video timestamp tracking (mirroring Video Hub)
-            if 'academic_video_start_time' not in st.session_state:
-                st.session_state.academic_video_start_time = time.time()
-            
-            # Calculate timer_elapsed (maps to video timestamp)
-            timer_elapsed = int(time.time() - st.session_state.academic_video_start_time)
-            
-            # Initialize audio processing state (MD5 hash check - mirroring Video Hub) [cite: 2025-12-21]
-            # Debug Check: Ensure MD5 hash check doesn't block first recording [cite: 2025-12-21]
-            if 'academic_last_audio_hash' not in st.session_state:
-                st.session_state.academic_last_audio_hash = None  # Initialize to None, not empty string
-            
-            # Session State Alignment: Initialize academic_audio_buffer to avoid conflicts [cite: 2025-12-21]
-            if 'academic_audio_buffer' not in st.session_state:
-                st.session_state.academic_audio_buffer = None
-            
-            # Get current lesson transcript from session state
-            current_lesson_transcript = st.session_state.get('current_lesson_transcript', '')
-            
-            # Note: Persistent Greeting is now displayed in the sidebar (moved for better placement) [cite: 2025-12-21]
-            
-            # Manual Chat Spark: Add button to start Socratic discussion [cite: 2025-12-21]
-            if len(st.session_state.academic_chat_history) == 0:
-                if st.button("💬 Start Socratic Discussion", key="start_academic_discussion", type="primary", use_container_width=True):
-                    # Verify transcript is populated
-                    if not current_lesson_transcript or not current_lesson_transcript.strip():
-                        current_lesson_transcript = st.session_state.get('current_lesson_transcript', '')
-                    
-                    if current_lesson_transcript and current_lesson_transcript.strip():
-                        current_page = st.session_state.get('current_page', '📖 Academic Hub')
-                        
-                        # Simplified Trilingual Prompt: Direct and simple [cite: 2025-12-20]
-                        initial_greeting_prompt = f"""Greeting: English first, then Japanese, then Nepali. Then ask one question about "{lesson_name}".
-
-**Lesson Transcript:**
-{current_lesson_transcript}
-
-**Your Response (trilingual greeting + one Socratic question):**
-"""
-                        
-                        # Call get_sensei_response with simplified prompt
-                        with st.spinner("🎓 Sensei is preparing your first question..."):
-                            initial_greeting = get_sensei_response(
-                                user_input=initial_greeting_prompt,
-                                conversation_history=[],
-                                transcript=current_lesson_transcript,
-                                timer_elapsed=0,
-                                track="Academic",
-                                current_page=current_page
-                            )
-                        
-                        st.session_state.academic_chat_history.append({
-                            'role': 'sensei',
-                            'content': initial_greeting
-                        })
-                        
-                        st.rerun()
-                    else:
-                        st.warning("⚠️ Lesson transcript not available. Please select a lesson first.")
-            
-            # Display chat history
-            # UI Rendering: Ensure Markdown blocks render correctly [cite: 2025-12-21]
-            if st.session_state.academic_chat_history:
-                for message in st.session_state.academic_chat_history:
-                    if message['role'] == 'sensei':
-                        with st.chat_message("assistant"):
-                            # UI Rendering: Use st.markdown to properly render trilingual Markdown blocks [cite: 2025-12-21]
-                            st.markdown(message['content'])
-                    elif message['role'] == 'user':
-                        with st.chat_message("user"):
-                            st.write(message['content'])
-            if 'academic_is_final_competency_mode' not in st.session_state:
-                st.session_state.academic_is_final_competency_mode = False
-            
-            # Chat input for user messages (Text mode)
-            if input_method == "text":
-                user_message = st.chat_input("Type your message to JLPT Sensei...")
-            else:
-                # Audio mode - mic_recorder (mirroring Video Hub)
-                user_message = None
-                try:
-                    from streamlit_mic_recorder import mic_recorder
-                    
-                    st.markdown("**🎤 Voice Input:**")
-                    # Recording Indicator: Add key and styling consistent with Concierge [cite: 2025-12-21]
-                    audio = mic_recorder(
-                        start_prompt="🎤 Start Recording",
-                        stop_prompt="🛑 Stop & Transcribe",
-                        key="academic_mic",  # Use academic_mic key for consistency [cite: 2025-12-21]
-                        use_container_width=True
-                    )
-                    
-                    # Microphone Status: Recording indicator placed directly above chat input area [cite: 2025-12-21]
-                    # Check if mic_recorder is currently recording
-                    if audio is not None:
-                        # If audio exists, it means recording has completed
-                        if isinstance(audio, dict) and 'bytes' in audio:
-                            st.success("✅ Recording complete! Processing...")
-                        elif isinstance(audio, dict):
-                            # Recording might be in progress - show status directly above chat input
-                            st.info("🎙️ Recording...")  # Microphone Status: Directly above chat input [cite: 2025-12-21]
-                    else:
-                        # No recording state - show ready state
-                        st.caption("💡 Click the button above to start recording")
-                    
-                    # Process audio when recording stops (with MD5 hash check) [cite: 2025-12-21]
-                    # Audio Input Hook: Store audio data and show message [cite: 2025-12-21]
-                    # Link to UI: Connect audio hook to OpenAI Whisper [cite: 2025-12-21]
-                    # Session State Alignment: Save to academic_audio_buffer to avoid conflicts [cite: 2025-12-21]
-                    if audio and isinstance(audio, dict) and 'bytes' in audio:
-                        # Audio Input Hook: Store audio data in temporary session state variable [cite: 2025-12-21]
-                        st.session_state.last_audio_data = audio['bytes']
-                        
-                        # Store audio in academic-specific buffer
-                        st.session_state.academic_audio_buffer = audio['bytes']
-                        
-                        # Check if this is new audio (not already processed) - MD5 hash check
-                        # Debug Check: Ensure MD5 hash check doesn't block first recording [cite: 2025-12-21]
-                        import hashlib
-                        audio_hash = hashlib.md5(audio['bytes']).hexdigest()
-                        
-                        # Allow processing if hash is None (first recording) or different from last
-                        if st.session_state.academic_last_audio_hash is None or audio_hash != st.session_state.academic_last_audio_hash:
-                            st.session_state.academic_last_audio_hash = audio_hash
-                            
-                            # Link to UI: Immediately call transcribe_audio() when audio is detected [cite: 2025-12-21]
-                            try:
-                                from api.utils import transcribe_audio
-                                
-                                # Show spinner during transcription
-                                with st.spinner("🎤 Transcribing with Whisper..."):
-                                    # Transcribe audio using OpenAI Whisper (multilingual support: English, Japanese, Nepali)
-                                    transcribed_text = transcribe_audio(st.session_state.last_audio_data)
-                                
-                                # Link to UI: Store transcribed text in appropriate variable [cite: 2025-12-21]
-                                if transcribed_text and not transcribed_text.startswith("Error"):
-                                    # Check if we're in Final Competency mode
-                                    if st.session_state.academic_is_final_competency_mode:
-                                        # Store in competency response text area
-                                        current_response = st.session_state.get('academic_competency_response', '')
-                                        st.session_state.academic_competency_response = current_response + " " + transcribed_text if current_response else transcribed_text
-                                        st.success("Speech-to-Text complete!")  # Link to UI: Display success message [cite: 2025-12-21]
-                                    else:
-                                        # Store in chat history for normal conversation
-                                        st.session_state.academic_competency_response = transcribed_text
-                                        st.success("Speech-to-Text complete!")  # Link to UI: Display success message [cite: 2025-12-21]
-                                        
-                                        # Microphone-to-Chat: Automatically append transcription to chat history [cite: 2025-12-21]
-                                        st.session_state.academic_chat_history.append({
-                                            'role': 'user',
-                                            'content': transcribed_text
-                                        })
-                                        
-                                        # Get Sensei response immediately with Academic Hub persona
-                                        # Transcript-to-Sensei: Ensure current_lesson_transcript is passed as system prompt context [cite: 2025-12-20]
-                                        current_page = st.session_state.get('current_page', '📖 Academic Hub')
-                                        current_lesson_transcript = st.session_state.get('current_lesson_transcript', '')
-                                        
-                                        # Ensure transcript is populated before calling get_sensei_response
-                                        if not current_lesson_transcript or not current_lesson_transcript.strip():
-                                            # Fallback: try to get from session state
-                                            current_lesson_transcript = st.session_state.get('current_lesson_transcript', '')
-                                        
-                                        sensei_response = get_sensei_response(
-                                            user_input=transcribed_text,
-                                            conversation_history=st.session_state.academic_chat_history,
-                                            transcript=current_lesson_transcript,  # Transcript passed as system context [cite: 2025-12-20]
-                                            timer_elapsed=timer_elapsed,
-                                            track="Academic",
-                                            current_page=current_page
-                                        )
-                                        
-                                        st.session_state.academic_chat_history.append({
-                                            'role': 'sensei',
-                                            'content': sensei_response
-                                        })
-                                    
-                                    # Rerun to update display
-                                    st.rerun()
-                                else:
-                                    st.error(f"Transcription failed: {transcribed_text}")
-                            except ImportError:
-                                # Fallback to Gemini transcription if OpenAI is not available
-                                st.warning("OpenAI Whisper not available. Falling back to Gemini transcription.")
-                                with st.spinner("🎤 Sensei is transcribing your voice..."):
-                                    # Transcribe audio from academic_audio_buffer using Gemini fallback
-                                    transcribed_text = transcribe_audio_with_gemini(st.session_state.academic_audio_buffer)
-                                
-                                if transcribed_text and not transcribed_text.startswith("Error"):
-                                    # Check if we're in Final Competency mode
-                                    if st.session_state.academic_is_final_competency_mode:
-                                        # Store in competency response text area
-                                        current_response = st.session_state.get('academic_competency_response', '')
-                                        st.session_state.academic_competency_response = current_response + " " + transcribed_text if current_response else transcribed_text
-                                        st.success("Speech-to-Text complete!")  # Link to UI: Display success message [cite: 2025-12-21]
-                                    else:
-                                        # Store in chat history for normal conversation
-                                        st.session_state.academic_competency_response = transcribed_text
-                                        st.success("Speech-to-Text complete!")  # Link to UI: Display success message [cite: 2025-12-21]
-                                        
-                                        # Microphone-to-Chat: Automatically append transcription to chat history [cite: 2025-12-21]
-                                        st.session_state.academic_chat_history.append({
-                                            'role': 'user',
-                                            'content': transcribed_text
-                                        })
-                                        
-                                        # Get Sensei response immediately with Academic Hub persona
-                                        # Transcript-to-Sensei: Ensure current_lesson_transcript is passed as system prompt context [cite: 2025-12-20]
-                                        current_page = st.session_state.get('current_page', '📖 Academic Hub')
-                                        current_lesson_transcript = st.session_state.get('current_lesson_transcript', '')
-                                        
-                                        # Ensure transcript is populated before calling get_sensei_response
-                                        if not current_lesson_transcript or not current_lesson_transcript.strip():
-                                            # Fallback: try to get from session state
-                                            current_lesson_transcript = st.session_state.get('current_lesson_transcript', '')
-                                        
-                                        sensei_response = get_sensei_response(
-                                            user_input=transcribed_text,
-                                            conversation_history=st.session_state.academic_chat_history,
-                                            transcript=current_lesson_transcript,  # Transcript passed as system context [cite: 2025-12-20]
-                                            timer_elapsed=timer_elapsed,
-                                            track="Academic",
-                                            current_page=current_page
-                                        )
-                                        
-                                        st.session_state.academic_chat_history.append({
-                                            'role': 'sensei',
-                                            'content': sensei_response
-                                        })
-                                    
-                                    # Rerun to update display
-                                    st.rerun()
-                                else:
-                                    st.error(f"❌ Transcription failed: {transcribed_text}")
-                except ImportError:
-                    st.warning("⚠️ streamlit-mic-recorder not installed. Install with: pip install streamlit-mic-recorder")
-                    st.info("💡 Please use text input mode instead.")
-                except Exception as e:
-                    st.error(f"❌ Audio recording error: {str(e)}")
-            
-            if user_message:
-                # Add user message to chat history
-                st.session_state.academic_chat_history.append({
-                    'role': 'user',
-                    'content': user_message
-                })
-                
-                # Get Sensei response using Socratic logic with Academic Hub persona
-                current_page = st.session_state.get('current_page', '📖 Academic Hub')
-                current_lesson_transcript = st.session_state.get('current_lesson_transcript', '')
-                sensei_response = get_sensei_response(
-                    user_input=user_message,
-                    conversation_history=st.session_state.academic_chat_history,
-                    transcript=current_lesson_transcript,
-                    timer_elapsed=timer_elapsed,
-                    track="Academic",
-                    current_page=current_page
-                )
-                
-                st.session_state.academic_chat_history.append({
-                    'role': 'sensei',
-                    'content': sensei_response
-                })
-                
-                # Rerun to update the chat display
-                st.rerun()
-            
-            # Display timer and phase indicator
-            phase_indicator = "Evaluator" if timer_elapsed >= 180 else "Helpful Assistant"
-            st.caption(f"⏱️ Timer: {timer_elapsed}s | Phase: {phase_indicator}")
-            
-            # Clear chat button
-            if st.button("Clear Chat History", key="clear_academic_chat"):
-                st.session_state.academic_chat_history = []
-                st.session_state.academic_video_start_time = time.time()  # Reset timer
-                st.rerun()
-            
-            # Mastery Score Preview (mirroring Video Hub)
-            st.markdown("---")
-            st.subheader("📊 Mastery Score Preview")
-            mastery_scores, _ = calculate_mastery_scores(candidate_id)
-            if "Academic" in mastery_scores:
-                track_scores = mastery_scores["Academic"]
-                for skill, score in track_scores.items():
-                    st.metric(
-                        label=skill,
-                        value=f"{score:.1f}%",
-                        help=f"Current mastery level for {skill} in Academic track"
-                    )
-            else:
-                st.info("No mastery scores yet. Start chatting with Sensei to earn points!")
-        else:
-            # Show message when chat is inactive
-            st.info("Toggle 'Chat with Sensei' to start a conversation during video playback.")
-        
-        # Final Competency Submission (mirroring Video Hub exactly) [cite: 2025-12-21]
-        # Always accessible, regardless of chat state
-        st.markdown("---")
-        with st.expander("📝 Final Competency Submission", expanded=False):
-                st.markdown("**Submit your final response for JLPT competency assessment (up to 3,000 words):**")
-                
-                # Toggle for Final Competency mode (affects audio transcription destination)
-                final_competency_mode = st.checkbox(
-                    "🎤 Use voice input for Final Competency Statement",
-                    key="academic_final_competency_voice_mode",
-                    help="When enabled, voice recordings will be appended to this text area instead of the chat."
-                )
-                st.session_state.academic_is_final_competency_mode = final_competency_mode
-                
-                # Initialize final response in session state
-                if 'academic_competency_response' not in st.session_state:
-                    st.session_state.academic_competency_response = ""
-                
-                # Force Visibility: Audio recorder in Final Competency section [cite: 2025-12-21]
-                if final_competency_mode:
-                    try:
-                        from streamlit_mic_recorder import mic_recorder
-                        from api.utils import transcribe_audio
-                        import hashlib
-                        
-                        st.markdown("**🎤 Voice Recording:**")
-                        # Force Visibility: Ensure mic_recorder is called explicitly [cite: 2025-12-21]
-                        audio_data = mic_recorder(
-                            start_prompt="🎤 Start Recording",
-                            stop_prompt="🛑 Stop Recording",
-                            key="academic_final_competency_mic",
-                            use_container_width=True
-                        )
-                        
-                        # Check if audio has bytes
-                        audio_bytes = None
-                        if audio_data is not None and isinstance(audio_data, dict) and 'bytes' in audio_data:
-                            audio_bytes = audio_data['bytes']
-                        
-                        # Debug Mode: Show when audio bytes are detected [cite: 2025-12-21]
-                        if audio_bytes is not None:
-                            st.write("Debug: Audio bytes detected")
-                            
-                            # Check if this is new audio (not already processed) - MD5 hash check
-                            if 'academic_final_competency_last_audio_hash' not in st.session_state:
-                                st.session_state.academic_final_competency_last_audio_hash = None
-                            
-                            audio_hash = hashlib.md5(audio_bytes).hexdigest()
-                            
-                            # Allow processing if hash is None (first recording) or different from last
-                            if st.session_state.academic_final_competency_last_audio_hash is None or audio_hash != st.session_state.academic_final_competency_last_audio_hash:
-                                st.session_state.academic_final_competency_last_audio_hash = audio_hash
-                                
-                                # Immediate Feedback: Show spinner when recording stops [cite: 2025-12-21]
-                                with st.spinner("Transcribing your voice..."):
-                                    try:
-                                        # Transcribe using Whisper
-                                        transcribed_text = transcribe_audio(audio_bytes)
-                                        
-                                        if transcribed_text and not transcribed_text.startswith("Error"):
-                                            # The Bridge: Append directly to academic_competency_response [cite: 2025-12-21]
-                                            current_response = st.session_state.get('academic_competency_response', '')
-                                            if current_response:
-                                                st.session_state.academic_competency_response = current_response + " " + transcribed_text
-                                            else:
-                                                st.session_state.academic_competency_response = transcribed_text
-                                            
-                                            st.success("Speech-to-Text complete! ✅")
-                                            st.rerun()  # Rerun to update text area
-                                        else:
-                                            st.error(f"Transcription failed: {transcribed_text}")
-                                    except ImportError:
-                                        st.error("OpenAI Whisper not available. Please install: pip install openai")
-                                    except Exception as e:
-                                        st.error(f"Error during transcription: {str(e)}")
-                    except ImportError:
-                        st.warning("⚠️ streamlit-mic-recorder not installed. Install with: pip install streamlit-mic-recorder")
-                    except Exception as e:
-                        st.error(f"Error initializing microphone: {str(e)}")
-                
-                # Text area with live word counter (mirroring Video Hub) [cite: 2025-12-21]
-                final_response = st.text_area(
-                    "Your final competency response:",
-                    value=st.session_state.academic_competency_response,
-                    key="academic_final_response_text_area",
-                    height=300,
-                    help="Write your comprehensive response here. The word counter will update in real-time."
-                )
-                
-                # Live word counter (mirroring Video Hub) [cite: 2025-12-21]
-                word_count = len(final_response.split()) if final_response else 0
-                max_words = 3000
-                word_count_color = "green" if word_count <= max_words else "red"
-                st.markdown(
-                    f"<p style='text-align: right; color: {word_count_color}; font-weight: bold;'>"
-                    f"Words: {word_count} / {max_words}</p>",
-                    unsafe_allow_html=True
-                )
-                
-                # Update session state
-                st.session_state.academic_competency_response = final_response
-                
-                # Submit button (mirroring Video Hub)
-                col_submit1, col_submit2, col_submit3 = st.columns([2, 1, 2])
-                with col_submit2:
-                    submit_clicked = st.button(
-                        "🚀 Submit to Sensei",
-                        key="submit_academic_response",
-                        type="primary",
-                        use_container_width=True,
-                        disabled=word_count == 0 or word_count > max_words
-                    )
-                
-                if submit_clicked:
-                    if word_count == 0:
-                        st.error("Please enter a response before submitting.")
-                    elif word_count > max_words:
-                        st.error(f"Response exceeds {max_words} words. Please shorten your response.")
-                    else:
-                        # Show spinner and grade
-                        with st.spinner("Grading in Progress... Please wait while Sensei evaluates your response."):
-                            try:
-                                from agency.training_agent.competency_grading_tool import CompetencyGradingTool
-                                
-                                # Map language code
-                                lang_map = {"En": "en", "Ne": "ne", "Ja": "ja"}
-                                language_code = lang_map.get(selected_language, "en")
-                                
-                                # Call CompetencyGradingTool
-                                # Force Initialization: Tool initialization verified [cite: 2025-12-21]
-                                grading_tool = CompetencyGradingTool()
-                                
-                                # Get lesson name from session state for progress persistence [cite: 2025-12-21]
-                                current_lesson_name = st.session_state.get('academic_current_lesson_name', 'Unknown Lesson')
-                                
-                                grading_result = grading_tool.run(
-                                    response=final_response,
-                                    candidate_id=candidate_id,
-                                    track="Academic",
-                                    language=language_code,
-                                    lesson_name=current_lesson_name  # Pass lesson name for progress persistence
-                                )
-                                
-                                # Display results
-                                st.success("✅ Assessment Complete! Your response has been graded.")
-                                
-                                # Show grading results
-                                if isinstance(grading_result, dict):
-                                    st.markdown("### 📊 Grading Results")
-                                    col_grade1, col_grade2 = st.columns(2)
-                                    with col_grade1:
-                                        st.metric("Overall Grade", f"{grading_result.get('grade', 'N/A')}/10")
-                                    with col_grade2:
-                                        st.info(f"**Accuracy:** {grading_result.get('accuracy_feedback', 'No feedback')}")
-                                    st.info(f"**Grammar:** {grading_result.get('grammar_feedback', 'No feedback')}")
-                                
-                                # Success toast
-                                st.toast("🎉 Your competency assessment has been submitted successfully!")
-                                
-                                # Auto-Navigation: Add button in success message [cite: 2025-12-21]
-                                st.markdown("---")
-                                if st.button("📊 View My Mastery Progress", key="view_mastery_progress_academic", use_container_width=True):
-                                    # Set sidebar selection to Progress page [cite: 2025-12-21]
-                                    st.session_state.page = "Progress"
-                                    st.session_state.current_page = "Progress"
-                                    st.rerun()
-                                
-                                # Clear the response after successful submission
-                                st.session_state.academic_competency_response = ""
-                                
-                            except ImportError:
-                                st.error("Competency grading tool is not available. Please ensure all dependencies are installed.")
-                            except Exception as e:
-                                st.error(f"An error occurred during grading: {str(e)}")
-                                import traceback
-                                if config.DEBUG:
-                                    with st.expander("Debug Info"):
-                                        st.code(traceback.format_exc())
+        # Legacy chat interface code removed - replaced with render_unified_chat_interface above [cite: 2025-12-21]
 
 
 def load_transcripts_from_directory(transcript_dir: Path) -> list[dict]:
@@ -4837,6 +4667,7 @@ def show_food_tech_hub():
                             # Update mastery scores in database based on grading result [cite: 2025-12-21]
                             if isinstance(grading_result, dict):
                                 update_mastery_scores_from_grading(candidate_id, "Food/Tech", grading_result)
+                                st.success("✅ Mastery updated for Food/Tech Hub")
                                 question_word_count = grading_result.get('question_word_count', 0)
                                 st.session_state.food_tech_session_total_words = st.session_state.get('food_tech_session_total_words', 0) + question_word_count
                             
@@ -5125,6 +4956,7 @@ def show_caregiving_hub():
                         # Update mastery scores in database based on grading result [cite: 2025-12-21]
                         if isinstance(grading_result, dict):
                             update_mastery_scores_from_grading(candidate_id, "Care-giving", grading_result)
+                            st.success("✅ Mastery updated for Care-giving Hub")
                             question_word_count = grading_result.get('question_word_count', 0)
                             st.session_state.caregiving_session_total_words = st.session_state.get('caregiving_session_total_words', 0) + question_word_count
                         

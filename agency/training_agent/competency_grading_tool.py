@@ -316,8 +316,30 @@ def save_grading_result(lesson_name: str, scores: dict, session_id: Optional[str
         data = {
             "total_word_count": 0,
             "lesson_history": [],
-            "sessions": {}  # Session Persistence: Store sessions by session_id [cite: 2025-12-21]
+            "sessions": {},  # Session Persistence: Store sessions by session_id [cite: 2025-12-21]
+            "track_mastery": {  # Track-specific mastery scores [cite: 2025-12-21]
+                "Academic": {"vocab": 0, "tone": 0, "logic": 0},
+                "Food/Tech": {"vocab": 0, "tone": 0, "logic": 0},
+                "Care-giving": {"vocab": 0, "tone": 0, "logic": 0}
+            }
         }
+    
+    # Initialize track_mastery if it doesn't exist (for backward compatibility)
+    if "track_mastery" not in data:
+        data["track_mastery"] = {
+            "Academic": {"vocab": 0, "tone": 0, "logic": 0},
+            "Food/Tech": {"vocab": 0, "tone": 0, "logic": 0},
+            "Care-giving": {"vocab": 0, "tone": 0, "logic": 0}
+        }
+    
+    # Ensure all tracks exist in track_mastery
+    for track in ["Academic", "Food/Tech", "Care-giving"]:
+        if track not in data["track_mastery"]:
+            data["track_mastery"][track] = {"vocab": 0, "tone": 0, "logic": 0}
+        # Ensure all skills exist for each track
+        for skill in ["vocab", "tone", "logic"]:
+            if skill not in data["track_mastery"][track]:
+                data["track_mastery"][track][skill] = 0
     
     # Generate session_id if not provided
     if not session_id:

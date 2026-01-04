@@ -1,5 +1,5 @@
 {
-    "total_word_count": 136,
+    "total_word_count": 140,
     "lesson_history": [
         {
             "timestamp": "2026-01-01T17:21:56.832071",
@@ -198,6 +198,125 @@
                 "grammar_feedback": "The phrase is grammatically correct in isolation, but lacks context and relevance.",
                 "category": "Academic"
             }
+        },
+        {
+            "timestamp": "2026-01-04T10:23:31.926555",
+            "lesson": "1. Mastery Test Nursing",
+            "session_id": "7e42aa50-8283-4829-bb1f-6742393ce647",
+            "category": "Care-giving",
+            "scores": {
+                "grade": 2,
+                "word_count": 6,
+                "question_word_count": 0,
+                "question_duration": null,
+                "sensei_critique": "The intention of highlighting double-checking is good, but the response lacks specificity and connection to the provided safety guidelines. The student needs to demonstrate a deeper understanding of the critical aspects of safety in the guidelines, such as FIFO, temperature logs, and equipment functionality. Remember to focus on *what* you are checking and *why* it matters for safety. [cite: 2025-12-20]",
+                "weakness_area": "Safety Knowledge",
+                "accuracy_feedback": "The response is too vague. While 'double checking' is important in food safety (checking expiration dates, equipment functionality, etc.), the student doesn't demonstrate understanding of *what* needs to be checked or *why* it's important based on the provided guidelines.",
+                "grammar_feedback": "The phrase \"To double check to make sure\" is redundant. 'To double check' already implies making sure. A better phrasing would be \"Double check\" or \"To ensure\".",
+                "category": "Care-giving"
+            }
+        },
+        {
+            "timestamp": "2026-01-04T10:45:06.548250",
+            "lesson": "1. Mastery Test Hygiene",
+            "session_id": "f22db1e8-868a-44a9-9dbf-3fc1894ea6a6",
+            "category": "Food/Tech",
+            "scores": {
+                "grade": 1,
+                "word_count": 1,
+                "question_word_count": 0,
+                "question_duration": null,
+                "sensei_critique": "The student needs to actually engage with the material. Simply saying 'substantial' is insufficient. Try summarizing the key points about handwashing, food storage, or equipment safety instead.",
+                "weakness_area": "Safety Knowledge",
+                "accuracy_feedback": "The response 'substantial' doesn't demonstrate any understanding of the provided safety guidelines. It offers no information about kitchen safety basics, hygiene standards, equipment safety, or food handling procedures outlined in the material.",
+                "grammar_feedback": "The word 'substantial' is grammatically correct in isolation, but it's not relevant to the context.",
+                "category": "Food/Tech"
+            }
+        },
+        {
+            "timestamp": "2026-01-04T10:47:33.757267",
+            "lesson": "3. N5 Kitchen Safety & Hygiene",
+            "session_id": "d5d69d75-b93a-49b9-9273-c440b9638994",
+            "category": "Academic",
+            "scores": {
+                "grade": 1,
+                "word_count": 4,
+                "question_word_count": 0,
+                "question_duration": null,
+                "sensei_critique": "This answer shows no comprehension of the safety material. Please review the guidelines on Kitchen Safety Basics, Hygiene Standards, Equipment Safety, and Food Handling. Try to summarize the purpose of these guidelines in your own words.",
+                "weakness_area": "Safety Knowledge",
+                "accuracy_feedback": "This response does not demonstrate any understanding of the provided safety guidelines. It lacks context and connection to the material.",
+                "grammar_feedback": "While grammatically complete as a phrase, it's unclear what it refers to.",
+                "category": "Academic"
+            }
+        },
+        {
+            "timestamp": "2026-01-04T11:51:17.176719",
+            "lesson": "1. Mastery Test Hygiene",
+            "session_id": "8b833ca5-c52d-4e67-b2a9-210034756dc3",
+            "category": "Food/Tech",
+            "scores": {
+                "grade": 4,
+                "word_count": 20,
+                "question_word_count": 0,
+                "question_duration": null,
+                "sensei_critique": "The student identifies one important aspect of handwashing. However, the response lacks depth and doesn't reflect a comprehensive understanding of the provided safety guidelines. Focus on summarizing and applying all points in the material, especially those beyond basic handwashing. [cite: 2025-12-20]",
+                "weakness_area": "Safety Knowledge",
+                "accuracy_feedback": "The response vaguely touches on 'wash hands before handling food' from the 'Kitchen Safety Basics' section, and does elaborate on technique. However, it doesn't demonstrate a broad understanding of the other key principles.",
+                "grammar_feedback": "The grammar is mostly correct, but the sentence structure could be improved for clarity. \"We can assume the person knows the basics of a hand wash; also, we have to wash between our fingers\" could be rephrased for better flow.",
+                "category": "Food/Tech"
+            }
+        },
+        {
+            "timestamp": "2026-01-04T11:53:36.416876",
+            "lesson": "1. Mastery Test Nursing",
+            "session_id": "d21c1f74-def0-4485-a698-e6b0830454a4",
+            "category": "Care-giving",
+            "scores": {
+                "grade": 1,
+                "word_count": 9,
+                "question_word_count": 0,
+                "question_duration": null,
+                "sensei_critique": "The student needs to review the provided materials carefully. The response given shows a complete lack of comprehension of the core concepts of kitchen safety. Focus on understanding the 'why' behind each guideline, such as preventing injury, maintaining hygiene, and ensuring food safety. Reread the material and try to explain each point in your own words.",
+                "weakness_area": "Safety Knowledge",
+                "accuracy_feedback": "This response does not relate to any of the provided safety guidelines. The student demonstrates no understanding of kitchen safety, hygiene, equipment safety, or food handling procedures outlined in the material.",
+                "grammar_feedback": "The sentence is grammatically correct in isolation, but completely irrelevant to the subject matter.",
+                "category": "Care-giving"
+            }
+        },
+        {
+            "timestamp": "2026-01-04T16:57:12.401439",
+            "lesson": "1. Mastery Test Hygiene",
+            "session_id": "d668c8e3-9738-47a9-b527-8b3fe7e4f4ab",
+            "category": "Food/Tech",
+            "scores": {
+                "grade": 1,
+                "word_count": 2,
+                "question_word_count": 0,
+                "question_duration": null,
+                "sensei_critique": "The response is insufficient and lacks any connection to the study material. It doesn't demonstrate any understanding of the provided safety guidelines. Focus on explaining specific safety procedures, providing examples related to the listed topics (kitchen safety, hygiene, equipment, food handling), and elaborating on why these procedures are important.",
+                "weakness_area": "Safety Knowledge",
+                "accuracy_feedback": "The response 'Higher quality' provides no specific information or understanding of the N5 Vocational Safety Guidelines. It doesn't demonstrate knowledge of kitchen safety basics, hygiene standards, equipment safety, or food handling procedures outlined in the study material. You need to demonstrate understanding of the guidelines, such as 'Food should be stored according to FIFO principles to prevent spoilage.'",
+                "grammar_feedback": "The grammar is correct, but the response is too vague and doesn't relate to the provided material.",
+                "category": "Food/Tech"
+            }
+        },
+        {
+            "timestamp": "2026-01-04T16:58:36.347604",
+            "lesson": "1. Mastery Test Nursing",
+            "session_id": "6d9765d7-7f4c-455e-bf98-e6c4aa26f561",
+            "category": "Care-giving",
+            "scores": {
+                "grade": 1,
+                "word_count": 2,
+                "question_word_count": 0,
+                "question_duration": null,
+                "sensei_critique": "This response shows no engagement with the provided study material. You need to demonstrate your understanding of the kitchen safety guidelines, hygiene standards, equipment safety, and food handling procedures by providing specific examples or explanations. Simply stating 'Very badly' is not helpful or informative.",
+                "weakness_area": "Safety Knowledge",
+                "accuracy_feedback": "The response 'Very badly' does not demonstrate any understanding of the provided safety guidelines (Kitchen Safety, Hygiene Standards, Equipment Safety, Food Handling). It provides no information relating to washing hands, using proper cutting techniques, or any other aspect of the study material.",
+                "grammar_feedback": "The grammar is technically correct, but the response is completely insufficient and lacks any meaningful content.",
+                "category": "Care-giving"
+            }
         }
     ],
     "sessions": {
@@ -330,6 +449,184 @@
                 }
             ],
             "last_updated": "2026-01-03T13:35:06.233863"
+        },
+        "7e42aa50-8283-4829-bb1f-6742393ce647": {
+            "session_start": "2026-01-04T10:23:31.926555",
+            "session_total_words": 0,
+            "session_total_time": 0.0,
+            "questions": [
+                {
+                    "timestamp": "2026-01-04T10:23:31.926555",
+                    "lesson": "1. Mastery Test Nursing",
+                    "scores": {
+                        "grade": 2,
+                        "word_count": 6,
+                        "question_word_count": 0,
+                        "question_duration": null,
+                        "sensei_critique": "The intention of highlighting double-checking is good, but the response lacks specificity and connection to the provided safety guidelines. The student needs to demonstrate a deeper understanding of the critical aspects of safety in the guidelines, such as FIFO, temperature logs, and equipment functionality. Remember to focus on *what* you are checking and *why* it matters for safety. [cite: 2025-12-20]",
+                        "weakness_area": "Safety Knowledge",
+                        "accuracy_feedback": "The response is too vague. While 'double checking' is important in food safety (checking expiration dates, equipment functionality, etc.), the student doesn't demonstrate understanding of *what* needs to be checked or *why* it's important based on the provided guidelines.",
+                        "grammar_feedback": "The phrase \"To double check to make sure\" is redundant. 'To double check' already implies making sure. A better phrasing would be \"Double check\" or \"To ensure\".",
+                        "category": "Care-giving"
+                    }
+                }
+            ],
+            "last_updated": "2026-01-04T10:23:31.926555"
+        },
+        "f22db1e8-868a-44a9-9dbf-3fc1894ea6a6": {
+            "session_start": "2026-01-04T10:45:06.548250",
+            "session_total_words": 0,
+            "session_total_time": 0.0,
+            "questions": [
+                {
+                    "timestamp": "2026-01-04T10:45:06.548250",
+                    "lesson": "1. Mastery Test Hygiene",
+                    "scores": {
+                        "grade": 1,
+                        "word_count": 1,
+                        "question_word_count": 0,
+                        "question_duration": null,
+                        "sensei_critique": "The student needs to actually engage with the material. Simply saying 'substantial' is insufficient. Try summarizing the key points about handwashing, food storage, or equipment safety instead.",
+                        "weakness_area": "Safety Knowledge",
+                        "accuracy_feedback": "The response 'substantial' doesn't demonstrate any understanding of the provided safety guidelines. It offers no information about kitchen safety basics, hygiene standards, equipment safety, or food handling procedures outlined in the material.",
+                        "grammar_feedback": "The word 'substantial' is grammatically correct in isolation, but it's not relevant to the context.",
+                        "category": "Food/Tech"
+                    }
+                }
+            ],
+            "last_updated": "2026-01-04T10:45:06.548250"
+        },
+        "d5d69d75-b93a-49b9-9273-c440b9638994": {
+            "session_start": "2026-01-04T10:47:33.757267",
+            "session_total_words": 0,
+            "session_total_time": 0.0,
+            "questions": [
+                {
+                    "timestamp": "2026-01-04T10:47:33.757267",
+                    "lesson": "3. N5 Kitchen Safety & Hygiene",
+                    "scores": {
+                        "grade": 1,
+                        "word_count": 4,
+                        "question_word_count": 0,
+                        "question_duration": null,
+                        "sensei_critique": "This answer shows no comprehension of the safety material. Please review the guidelines on Kitchen Safety Basics, Hygiene Standards, Equipment Safety, and Food Handling. Try to summarize the purpose of these guidelines in your own words.",
+                        "weakness_area": "Safety Knowledge",
+                        "accuracy_feedback": "This response does not demonstrate any understanding of the provided safety guidelines. It lacks context and connection to the material.",
+                        "grammar_feedback": "While grammatically complete as a phrase, it's unclear what it refers to.",
+                        "category": "Academic"
+                    }
+                }
+            ],
+            "last_updated": "2026-01-04T10:47:33.757267"
+        },
+        "8b833ca5-c52d-4e67-b2a9-210034756dc3": {
+            "session_start": "2026-01-04T11:51:17.176719",
+            "session_total_words": 0,
+            "session_total_time": 0.0,
+            "questions": [
+                {
+                    "timestamp": "2026-01-04T11:51:17.176719",
+                    "lesson": "1. Mastery Test Hygiene",
+                    "scores": {
+                        "grade": 4,
+                        "word_count": 20,
+                        "question_word_count": 0,
+                        "question_duration": null,
+                        "sensei_critique": "The student identifies one important aspect of handwashing. However, the response lacks depth and doesn't reflect a comprehensive understanding of the provided safety guidelines. Focus on summarizing and applying all points in the material, especially those beyond basic handwashing. [cite: 2025-12-20]",
+                        "weakness_area": "Safety Knowledge",
+                        "accuracy_feedback": "The response vaguely touches on 'wash hands before handling food' from the 'Kitchen Safety Basics' section, and does elaborate on technique. However, it doesn't demonstrate a broad understanding of the other key principles.",
+                        "grammar_feedback": "The grammar is mostly correct, but the sentence structure could be improved for clarity. \"We can assume the person knows the basics of a hand wash; also, we have to wash between our fingers\" could be rephrased for better flow.",
+                        "category": "Food/Tech"
+                    }
+                }
+            ],
+            "last_updated": "2026-01-04T11:51:17.176719"
+        },
+        "d21c1f74-def0-4485-a698-e6b0830454a4": {
+            "session_start": "2026-01-04T11:53:36.416876",
+            "session_total_words": 0,
+            "session_total_time": 0.0,
+            "questions": [
+                {
+                    "timestamp": "2026-01-04T11:53:36.416876",
+                    "lesson": "1. Mastery Test Nursing",
+                    "scores": {
+                        "grade": 1,
+                        "word_count": 9,
+                        "question_word_count": 0,
+                        "question_duration": null,
+                        "sensei_critique": "The student needs to review the provided materials carefully. The response given shows a complete lack of comprehension of the core concepts of kitchen safety. Focus on understanding the 'why' behind each guideline, such as preventing injury, maintaining hygiene, and ensuring food safety. Reread the material and try to explain each point in your own words.",
+                        "weakness_area": "Safety Knowledge",
+                        "accuracy_feedback": "This response does not relate to any of the provided safety guidelines. The student demonstrates no understanding of kitchen safety, hygiene, equipment safety, or food handling procedures outlined in the material.",
+                        "grammar_feedback": "The sentence is grammatically correct in isolation, but completely irrelevant to the subject matter.",
+                        "category": "Care-giving"
+                    }
+                }
+            ],
+            "last_updated": "2026-01-04T11:53:36.416876"
+        },
+        "d668c8e3-9738-47a9-b527-8b3fe7e4f4ab": {
+            "session_start": "2026-01-04T16:57:12.400437",
+            "session_total_words": 0,
+            "session_total_time": 0.0,
+            "questions": [
+                {
+                    "timestamp": "2026-01-04T16:57:12.400437",
+                    "lesson": "1. Mastery Test Hygiene",
+                    "scores": {
+                        "grade": 1,
+                        "word_count": 2,
+                        "question_word_count": 0,
+                        "question_duration": null,
+                        "sensei_critique": "The response is insufficient and lacks any connection to the study material. It doesn't demonstrate any understanding of the provided safety guidelines. Focus on explaining specific safety procedures, providing examples related to the listed topics (kitchen safety, hygiene, equipment, food handling), and elaborating on why these procedures are important.",
+                        "weakness_area": "Safety Knowledge",
+                        "accuracy_feedback": "The response 'Higher quality' provides no specific information or understanding of the N5 Vocational Safety Guidelines. It doesn't demonstrate knowledge of kitchen safety basics, hygiene standards, equipment safety, or food handling procedures outlined in the study material. You need to demonstrate understanding of the guidelines, such as 'Food should be stored according to FIFO principles to prevent spoilage.'",
+                        "grammar_feedback": "The grammar is correct, but the response is too vague and doesn't relate to the provided material.",
+                        "category": "Food/Tech"
+                    }
+                }
+            ],
+            "last_updated": "2026-01-04T16:57:12.400437"
+        },
+        "6d9765d7-7f4c-455e-bf98-e6c4aa26f561": {
+            "session_start": "2026-01-04T16:58:36.347604",
+            "session_total_words": 0,
+            "session_total_time": 0.0,
+            "questions": [
+                {
+                    "timestamp": "2026-01-04T16:58:36.347604",
+                    "lesson": "1. Mastery Test Nursing",
+                    "scores": {
+                        "grade": 1,
+                        "word_count": 2,
+                        "question_word_count": 0,
+                        "question_duration": null,
+                        "sensei_critique": "This response shows no engagement with the provided study material. You need to demonstrate your understanding of the kitchen safety guidelines, hygiene standards, equipment safety, and food handling procedures by providing specific examples or explanations. Simply stating 'Very badly' is not helpful or informative.",
+                        "weakness_area": "Safety Knowledge",
+                        "accuracy_feedback": "The response 'Very badly' does not demonstrate any understanding of the provided safety guidelines (Kitchen Safety, Hygiene Standards, Equipment Safety, Food Handling). It provides no information relating to washing hands, using proper cutting techniques, or any other aspect of the study material.",
+                        "grammar_feedback": "The grammar is technically correct, but the response is completely insufficient and lacks any meaningful content.",
+                        "category": "Care-giving"
+                    }
+                }
+            ],
+            "last_updated": "2026-01-04T16:58:36.347604"
+        }
+    },
+    "track_mastery": {
+        "Academic": {
+            "vocab": 0,
+            "tone": 0,
+            "logic": 0
+        },
+        "Food/Tech": {
+            "vocab": 0,
+            "tone": 0,
+            "logic": 0
+        },
+        "Care-giving": {
+            "vocab": 0,
+            "tone": 0,
+            "logic": 0
         }
     }
 }
