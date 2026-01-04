@@ -2067,6 +2067,13 @@ def generate_trilingual_tts(text: str, language: str, track: str | None = None) 
 # Main App
 def main():
     """Main Streamlit app."""
+    # Clear Cache: Ensure Streamlit isn't running an old version from memory [cite: 2025-12-21]
+    try:
+        st.cache_data.clear()
+        st.cache_resource.clear()
+    except Exception:
+        pass  # Cache clearing is optional, don't fail if it's not available
+    
     # ATOMIC FIX: Initialize session state at the very top, before any UI calls
     if 'concierge_avatar_visible' not in st.session_state:
         st.session_state.concierge_avatar_visible = True
@@ -2127,6 +2134,14 @@ def main():
     if 'caregiving_chat_history' not in st.session_state:
         st.session_state.caregiving_chat_history = []
     
+    # Restore Audio: Initialize input_method for all tracks to ensure mic_recorder component is visible [cite: 2025-12-21]
+    if 'academic_input_method' not in st.session_state:
+        st.session_state.academic_input_method = "text"
+    if 'food_tech_input_method' not in st.session_state:
+        st.session_state.food_tech_input_method = "text"
+    if 'caregiving_input_method' not in st.session_state:
+        st.session_state.caregiving_input_method = "text"
+    
     # Show Concierge Widget (after page selection to avoid conflicts)
     # Always show widget - it's a core feature
     # HARD-OVERRIDE: Widget is wrapped in strict sidebar block inside show_concierge_widget()
@@ -2151,7 +2166,15 @@ def main():
         elif page == "Video Hub":
             show_video_hub()
         elif page == "📖 Academic Hub":
-            show_academic_hub()
+            # Nuclear Fix: Explicitly wrap Academic Hub call with detailed error logger [cite: 2025-12-21]
+            try:
+                show_academic_hub()
+            except Exception as e:
+                import traceback
+                st.error(f"❌ Academic Hub Error: {str(e)}")
+                st.error(f"**Full Traceback:**")
+                st.code(traceback.format_exc(), language='python')
+                st.info("💡 Please check the traceback above to identify the exact line causing the error.")
         elif page == "🍜 Food/Tech Hub":
             show_food_tech_hub()
         elif page == "🏥 Care-giving Hub":
@@ -2536,58 +2559,6 @@ def show_progress_dashboard():
     # Data Source: Load mastery stats from user_progress.json [cite: 2025-12-21]
     total_word_count, lesson_history, track_mastery_json = load_mastery_stats()
     
-    # Cross-Hub Progress Update: Calculate category-specific word counts [cite: 2025-12-21]
-    academic_word_count = sum(
-        entry.get("scores", {}).get("word_count", 0) 
-        for entry in lesson_history 
-        if entry.get("category", "Academic") == "Academic"
-    )
-    food_tech_word_count = sum(
-        entry.get("scores", {}).get("word_count", 0) 
-        for entry in lesson_history 
-        if entry.get("category") == "Food/Tech"
-    )
-    caregiving_word_count = sum(
-        entry.get("scores", {}).get("word_count", 0) 
-        for entry in lesson_history 
-        if entry.get("category") == "Care-giving"
-    )
-    
-    # Calculate total career vocabulary (sum of all categories) for display and milestone celebration [cite: 2025-12-21]
-    total_career_vocab = academic_word_count + food_tech_word_count + caregiving_word_count
-    
-    # Milestone Celebration: Check if word count increased since last session [cite: 2025-12-21]
-    if 'last_word_count' not in st.session_state:
-        st.session_state.last_word_count = 0
-    
-    if total_career_vocab > st.session_state.last_word_count:
-        st.balloons()  # Milestone Celebration: Trigger balloons for 2026 progress [cite: 2025-12-21]
-        st.session_state.last_word_count = total_career_vocab
-    
-    # Visual Progress Bar: Display category-specific progress bars [cite: 2025-12-21]
-    st.subheader("📊 Category-Specific Progress")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        academic_progress = min(academic_word_count / 3000.0, 1.0)
-        st.progress(academic_progress)
-        st.caption(f"📖 Academic: {academic_word_count} / 3,000 words")
-    with col2:
-        food_tech_progress = min(food_tech_word_count / 3000.0, 1.0)
-        st.progress(food_tech_progress)
-        st.caption(f"🍜 Food/Tech: {food_tech_word_count} / 3,000 words")
-    with col3:
-        caregiving_progress = min(caregiving_word_count / 3000.0, 1.0)
-        st.progress(caregiving_progress)
-        st.caption(f"🏥 Care-giving: {caregiving_word_count} / 3,000 words")
-    
-    # Overall progress bar: Use total career vocabulary (sum of all categories) [cite: 2025-12-21]
-    st.markdown("---")
-    progress_value = min(total_career_vocab / 3000.0, 1.0)  # Calculation: min(total_career_vocab / 3000, 1.0) [cite: 2025-12-21]
-    st.progress(progress_value)
-    
-    # Sub-header: Show word count toward target [cite: 2025-12-21]
-    st.subheader(f'{total_career_vocab} / 3,000 words toward Commercial Center Competency')
-    
     # Activity Log: Display lesson_history in dataframe [cite: 2025-12-21]
     if lesson_history:
         st.markdown("---")
@@ -2695,6 +2666,62 @@ def show_progress_dashboard():
             
             st.caption(f"🕒 Last Evaluated: {formatted_time} ({time_ago})")
     
+    # Calculate Growth Velocity: First 3 vs Last 3 sessions per track [cite: 2025-12-21]
+    def calculate_growth_velocity(lesson_history, track_name):
+        """Calculate growth velocity from first 3 vs last 3 sessions for a track."""
+        from datetime import datetime
+        
+        # Filter by track (category)
+        track_history = [
+            entry for entry in lesson_history
+            if entry.get("category") == track_name
+        ]
+        
+        if len(track_history) < 3:
+            return None, None  # Not enough data
+        
+        # Sort by timestamp
+        try:
+            track_history.sort(key=lambda x: x.get("timestamp", ""))
+        except:
+            return None, None
+        
+        # First 3 sessions (start point)
+        first_3 = track_history[:3]
+        first_3_grades = [
+            entry.get("scores", {}).get("grade", 0)
+            for entry in first_3
+            if isinstance(entry.get("scores", {}).get("grade"), (int, float))
+        ]
+        start_avg = sum(first_3_grades) / len(first_3_grades) if first_3_grades else 0
+        
+        # Last 3 sessions (end point)
+        last_3 = track_history[-3:]
+        last_3_grades = [
+            entry.get("scores", {}).get("grade", 0)
+            for entry in last_3
+            if isinstance(entry.get("scores", {}).get("grade"), (int, float))
+        ]
+        end_avg = sum(last_3_grades) / len(last_3_grades) if last_3_grades else 0
+        
+        # Calculate velocity (convert 1-10 grade to percentage: grade * 10)
+        start_percent = start_avg * 10
+        end_percent = end_avg * 10
+        velocity = end_percent - start_percent
+        
+        # Get start date for display
+        start_date_str = first_3[0].get("timestamp", "")
+        try:
+            if isinstance(start_date_str, str):
+                start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                month_name = start_date.strftime("%B")
+            else:
+                month_name = "start"
+        except:
+            month_name = "start"
+        
+        return velocity, month_name
+    
     # Display overview metrics
     st.subheader("📈 Overall Mastery Scores")
     col1, col2, col3 = st.columns(3)
@@ -2729,10 +2756,18 @@ def show_progress_dashboard():
             # Calculate average
             avg_score = sum(track_scores) / len(track_scores) if track_scores else 0.0
             
+            # Calculate and display Growth Velocity [cite: 2025-12-21]
+            velocity, month_name = calculate_growth_velocity(lesson_history, track)
+            if velocity is not None:
+                velocity_delta = f"+{velocity:.1f}%" if velocity >= 0 else f"{velocity:.1f}%"
+                delta_text = f"Growth: {velocity_delta} since {month_name}"
+            else:
+                delta_text = None
+            
             st.metric(
                 f"{track_icons[track]} {track}",
                 f"{avg_score:.1f}%",
-                delta=f"{avg_score - 50:.1f}%" if avg_score > 50 else None
+                delta=delta_text
             )
     
     st.markdown("---")
@@ -2789,12 +2824,69 @@ def show_progress_dashboard():
         # Also create a radar chart for better visualization
         st.subheader("📊 Performance Radar Chart")
         
+        # Radar Chart Fallback: If track_mastery JSON is empty, pull from lesson_history [cite: 2025-12-21]
+        def get_radar_scores_from_history(track_name):
+            """Get radar chart scores from lesson_history if track_mastery is empty."""
+            from datetime import datetime
+            
+            # Filter by track
+            track_history = [
+                entry for entry in lesson_history
+                if entry.get("category") == track_name
+            ]
+            
+            if len(track_history) < 3:
+                return None  # Not enough data
+            
+            # Sort by timestamp and get last 3 sessions
+            try:
+                track_history.sort(key=lambda x: x.get("timestamp", ""))
+            except:
+                return None
+            
+            last_3 = track_history[-3:]
+            last_3_grades = [
+                entry.get("scores", {}).get("grade", 0)
+                for entry in last_3
+                if isinstance(entry.get("scores", {}).get("grade"), (int, float))
+            ]
+            
+            if not last_3_grades:
+                return None
+            
+            # Calculate average grade and convert to percentage (grade * 10)
+            avg_grade = sum(last_3_grades) / len(last_3_grades)
+            avg_percent = avg_grade * 10
+            
+            # Return as dict with all three skills using average (simplified mapping)
+            return {
+                "Vocabulary": avg_percent,
+                "Tone/Honorifics": avg_percent,
+                "Contextual Logic": avg_percent
+            }
+        
         # Create radar chart data
         fig_radar = go.Figure()
         
         for track in tracks:
+            # Check if track_mastery is empty (all values 0)
+            track_data_empty = (
+                track in track_mastery_json and
+                all(v == 0 for v in track_mastery_json[track].values())
+            )
+            
+            # Use lesson_history fallback if track_mastery is empty
+            if track_data_empty:
+                fallback_scores = get_radar_scores_from_history(track)
+                if fallback_scores:
+                    radar_values = [fallback_scores.get(skill, 0.0) for skill in skills]
+                else:
+                    radar_values = [mastery_scores[track].get(skill, 0.0) for skill in skills]
+            else:
+                radar_values = [mastery_scores[track].get(skill, 0.0) for skill in skills]
+            
             fig_radar.add_trace(go.Scatterpolar(
-                r=[mastery_scores[track].get(skill, 0.0) for skill in skills],
+                r=radar_values,
                 theta=skills,
                 fill='toself',
                 name=track
@@ -4034,19 +4126,8 @@ def show_academic_hub():
     """Display Academic Hub with JLPT-focused Socratic assessment."""
     st.header("📖 Academic Hub - JLPT Mastery")
     
-    # Mastery Dashboard: Display total career vocabulary (cumulative across all categories) [cite: 2025-12-21]
-    _, lesson_history = load_mastery_stats()  # Get lesson_history to calculate total career vocabulary
-    # Global vs. Session: Calculate total career vocabulary from all categories [cite: 2025-07-07, 2025-12-21]
-    total_career_vocab = sum(
-        entry.get("scores", {}).get("word_count", 0)
-        for entry in lesson_history
-    )
-    st.metric(
-        label="Total Career Vocabulary (Cumulative)",
-        value=total_career_vocab,
-        delta="Target: 3,000"
-    )
-    st.markdown("---")
+    # Load mastery stats for track_mastery data [cite: 2025-12-21]
+    total_word_count, lesson_history, track_mastery = load_mastery_stats()
     
     # Get candidate ID from session state
     if 'selected_candidate_id' not in st.session_state:
@@ -4409,8 +4490,7 @@ def show_food_tech_hub():
     Hub Content Activation: Food/Tech Hub fully wired with Socratic Sensei [cite: 2025-12-20, 2025-12-21]
     Uses same Socratic logic as Academic Hub but restricted to assets/transcripts/food_tech/
     """
-    st.header("🍜 Food/Tech Hub - HACCP Mastery")
-    st.markdown('<h1 class="main-header">🍜 Xplora Kodo: Japan and Beyond - Food/Tech Hub</h1>', unsafe_allow_html=True)
+    st.markdown('<h2 class="main-header">🍜 Food/Tech Hub - HACCP Mastery</h2>', unsafe_allow_html=True)
     
     # Metric Isolation: Display Current Session Vocabulary [cite: 2025-12-21]
     session_total_words = st.session_state.get('food_tech_session_total_words', 0)
@@ -4683,8 +4763,7 @@ def show_caregiving_hub():
     Hub Content Activation: Care-giving Hub fully wired with Socratic Sensei [cite: 2025-12-20, 2025-12-21]
     Uses same Socratic logic as Academic Hub but restricted to assets/transcripts/care_giving/
     """
-    st.header("🏥 Care-giving Hub - Kaigo Mastery")
-    st.markdown('<h1 class="main-header">🏥 Xplora Kodo: Japan and Beyond - Care-giving Hub</h1>', unsafe_allow_html=True)
+    st.markdown('<h2 class="main-header">🏥 Care-giving Hub - Kaigo Mastery</h2>', unsafe_allow_html=True)
     
     # Metric Isolation: Display Current Session Vocabulary [cite: 2025-12-21]
     session_total_words = st.session_state.get('caregiving_session_total_words', 0)
