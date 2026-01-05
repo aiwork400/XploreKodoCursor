@@ -1327,11 +1327,12 @@ def render_unified_chat_interface(
                 st.rerun()
     
     # Input Method Toggle (Text or Audio) - Ported from Academic Hub [cite: 2025-12-21]
+    # Unique Namespacing: Use prefix for radio button key to prevent duplicate key errors [cite: 2025-12-21]
     input_method = st.radio(
         "Input Method:",
         options=["text", "audio"],
         format_func=lambda x: "⌨️ Text" if x == "text" else "🎤 Audio",
-        key=f"{track_safe}_input_method",
+        key=f"{track}_input_method_selector",
         horizontal=True,
         help="Choose how to interact with Sensei: Text input or Audio recording"
     )
@@ -2067,16 +2068,24 @@ def generate_trilingual_tts(text: str, language: str, track: str | None = None) 
 # Main App
 def main():
     """Main Streamlit app."""
+    # Fix Duplicate Key: Initialize ALL session state keys at the very top, before any UI calls [cite: 2025-12-21]
+    if 'concierge_avatar_visible' not in st.session_state:
+        st.session_state.concierge_avatar_visible = True
+    
+    # Initialize input_method for all tracks ONLY ONCE at the top [cite: 2025-12-21]
+    if 'academic_input_method' not in st.session_state:
+        st.session_state.academic_input_method = "text"
+    if 'food_tech_input_method' not in st.session_state:
+        st.session_state.food_tech_input_method = "text"
+    if 'caregiving_input_method' not in st.session_state:
+        st.session_state.caregiving_input_method = "text"
+    
     # Clear Cache: Ensure Streamlit isn't running an old version from memory [cite: 2025-12-21]
     try:
         st.cache_data.clear()
         st.cache_resource.clear()
     except Exception:
         pass  # Cache clearing is optional, don't fail if it's not available
-    
-    # ATOMIC FIX: Initialize session state at the very top, before any UI calls
-    if 'concierge_avatar_visible' not in st.session_state:
-        st.session_state.concierge_avatar_visible = True
     
     st.markdown('<h1 class="main-header">🌏 Xplora Kodo: Japan and Beyond</h1>', unsafe_allow_html=True)
 
@@ -2095,6 +2104,18 @@ def main():
                 st.sidebar.warning(f"⚠️ {len(critical_logs)} critical event(s) in last hour")
         except Exception:
             pass
+    
+    # Emergency Reset Session State Button
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🔄 Emergency Reset Session State", key="emergency_reset_button", help="Clears all session state and cache to fix stuck data"):
+        st.session_state.clear()
+        try:
+            st.cache_data.clear()
+            st.cache_resource.clear()
+        except Exception:
+            pass
+        st.sidebar.success("✅ Session state and cache cleared! Page will reload.")
+        st.rerun()
     
     page_options = ["Candidate View", "Wisdom Hub", "Video Hub", "📖 Academic Hub", "🍜 Food/Tech Hub", "🏥 Care-giving Hub", "Progress", "Live Simulator", "Financial Ledger", "Compliance", "Life-in-Japan Support", "Virtual Classroom"]
     if admin_mode:
@@ -2134,13 +2155,7 @@ def main():
     if 'caregiving_chat_history' not in st.session_state:
         st.session_state.caregiving_chat_history = []
     
-    # Restore Audio: Initialize input_method for all tracks to ensure mic_recorder component is visible [cite: 2025-12-21]
-    if 'academic_input_method' not in st.session_state:
-        st.session_state.academic_input_method = "text"
-    if 'food_tech_input_method' not in st.session_state:
-        st.session_state.food_tech_input_method = "text"
-    if 'caregiving_input_method' not in st.session_state:
-        st.session_state.caregiving_input_method = "text"
+    # Note: input_method initialization moved to top of main() to prevent duplicate key errors [cite: 2025-12-21]
     
     # Show Concierge Widget (after page selection to avoid conflicts)
     # Always show widget - it's a core feature
@@ -2559,6 +2574,12 @@ def show_progress_dashboard():
     # Data Source: Load mastery stats from user_progress.json [cite: 2025-12-21]
     total_word_count, lesson_history, track_mastery_json = load_mastery_stats()
     
+    # Force 0.0% Wake-up: DEBUG print to verify query logic [cite: 2025-12-21]
+    st.write(f"DEBUG: Found {len(lesson_history)} sessions in DB")
+    if track_mastery_json:
+        for track, scores in track_mastery_json.items():
+            st.write(f"DEBUG: Track '{track}' keys: {list(scores.keys())}, values: {scores}")
+    
     # Activity Log: Display lesson_history in dataframe [cite: 2025-12-21]
     if lesson_history:
         st.markdown("---")
@@ -2666,10 +2687,39 @@ def show_progress_dashboard():
             
             st.caption(f"🕒 Last Evaluated: {formatted_time} ({time_ago})")
     
-    # Calculate Growth Velocity: First 3 vs Last 3 sessions per track [cite: 2025-12-21]
+    # Calculate Growth Velocity: Baseline Mastery vs Current Average [cite: 2025-12-21]
     def calculate_growth_velocity(lesson_history, track_name):
-        """Calculate growth velocity from first 3 vs last 3 sessions for a track."""
+        """
+        Calculate growth velocity using baseline comparison.
+        Baseline: Average of first 3 sessions ever recorded for this track.
+        Growth: ((Current_Average - Baseline_Average) / Baseline_Average) * 100
+        """
         from datetime import datetime
+        import re
+        
+        # Helper function to extract grade from various formats (including "Score: 8/10")
+        def extract_grade(entry):
+            """Extract grade from entry, handling Score: X/10 format."""
+            scores = entry.get("scores", {})
+            grade = scores.get("grade", None)
+            
+            # If grade is already a valid number
+            if isinstance(grade, (int, float)) and grade > 0:
+                return float(grade)
+            
+            # Try to extract from feedback text if grade is None or 0
+            accuracy_feedback = scores.get("accuracy_feedback", "")
+            grammar_feedback = scores.get("grammar_feedback", "")
+            combined_text = (accuracy_feedback + " " + grammar_feedback).lower()
+            
+            # Look for "Score: X/10" or "X/10" pattern
+            score_pattern = r'score:\s*(\d+(?:\.\d+)?)/10|(\d+(?:\.\d+)?)/10'
+            match = re.search(score_pattern, combined_text)
+            if match:
+                extracted = float(match.group(1) or match.group(2))
+                return extracted if 0 < extracted <= 10 else None
+            
+            return None
         
         # Filter by track (category)
         track_history = [
@@ -2677,40 +2727,52 @@ def show_progress_dashboard():
             if entry.get("category") == track_name
         ]
         
-        if len(track_history) < 3:
-            return None, None  # Not enough data
+        # Constraint: If only 1 session exists, Growth is 0% (New Student) [cite: 2025-12-21]
+        if len(track_history) < 2:
+            if len(track_history) == 1:
+                return 0.0, None  # New Student - 0% growth
+            return "pending", None  # No data - Data Pending
         
-        # Sort by timestamp
+        # Sort by timestamp ASCENDING (Fix the Math Sign: Ensure oldest first for baseline) [cite: 2025-12-21]
         try:
-            track_history.sort(key=lambda x: x.get("timestamp", ""))
+            track_history.sort(key=lambda x: x.get("timestamp", ""))  # ASCENDING: oldest first
         except:
             return None, None
         
-        # First 3 sessions (start point)
-        first_3 = track_history[:3]
-        first_3_grades = [
-            entry.get("scores", {}).get("grade", 0)
-            for entry in first_3
-            if isinstance(entry.get("scores", {}).get("grade"), (int, float))
-        ]
-        start_avg = sum(first_3_grades) / len(first_3_grades) if first_3_grades else 0
+        # Define the Baseline: Average of first 3 sessions ever recorded [cite: 2025-12-21]
+        num_sessions = len(track_history)
+        first_n = min(3, num_sessions)
+        first_sessions = track_history[:first_n]
+        first_grades = [extract_grade(entry) for entry in first_sessions]
+        first_grades = [g for g in first_grades if g is not None and g > 0]
         
-        # Last 3 sessions (end point)
-        last_3 = track_history[-3:]
-        last_3_grades = [
-            entry.get("scores", {}).get("grade", 0)
-            for entry in last_3
-            if isinstance(entry.get("scores", {}).get("grade"), (int, float))
-        ]
-        end_avg = sum(last_3_grades) / len(last_3_grades) if last_3_grades else 0
+        if not first_grades:
+            return None, None  # No valid grades found
         
-        # Calculate velocity (convert 1-10 grade to percentage: grade * 10)
-        start_percent = start_avg * 10
-        end_percent = end_avg * 10
-        velocity = end_percent - start_percent
+        baseline_avg = sum(first_grades) / len(first_grades)
+        baseline_percent = baseline_avg * 10  # Convert 1-10 grade to percentage
+        
+        # Current Average: Average of last 3 sessions
+        last_n = min(3, num_sessions)
+        last_sessions = track_history[-last_n:]
+        last_grades = [extract_grade(entry) for entry in last_sessions]
+        last_grades = [g for g in last_grades if g is not None and g > 0]
+        
+        if not last_grades:
+            return None, None  # No valid grades found
+        
+        current_avg = sum(last_grades) / len(last_grades)
+        current_percent = current_avg * 10  # Convert 1-10 grade to percentage
+        
+        # Calculate Real Progress: ((Current - Baseline) / Baseline) * 100 [cite: 2025-12-21]
+        # Constraint: If Baseline == 0, Growth is 100% [cite: 2025-12-21]
+        if baseline_percent == 0:
+            growth_percent = 100.0
+        else:
+            growth_percent = ((current_percent - baseline_percent) / baseline_percent) * 100
         
         # Get start date for display
-        start_date_str = first_3[0].get("timestamp", "")
+        start_date_str = first_sessions[0].get("timestamp", "")
         try:
             if isinstance(start_date_str, str):
                 start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
@@ -2720,7 +2782,7 @@ def show_progress_dashboard():
         except:
             month_name = "start"
         
-        return velocity, month_name
+        return growth_percent, month_name
     
     # Display overview metrics
     st.subheader("📈 Overall Mastery Scores")
@@ -2758,7 +2820,9 @@ def show_progress_dashboard():
             
             # Calculate and display Growth Velocity [cite: 2025-12-21]
             velocity, month_name = calculate_growth_velocity(lesson_history, track)
-            if velocity is not None:
+            if velocity == "pending":
+                delta_text = "New Track - Data Pending"
+            elif velocity is not None:
                 velocity_delta = f"+{velocity:.1f}%" if velocity >= 0 else f"{velocity:.1f}%"
                 delta_text = f"Growth: {velocity_delta} since {month_name}"
             else:
@@ -2835,27 +2899,29 @@ def show_progress_dashboard():
                 if entry.get("category") == track_name
             ]
             
-            if len(track_history) < 3:
+            if len(track_history) < 1:
                 return None  # Not enough data
             
-            # Sort by timestamp and get last 3 sessions
+            # Sort by timestamp and get last 5 sessions (Radar Chart 'Heat': smoothed view) [cite: 2025-12-21]
             try:
                 track_history.sort(key=lambda x: x.get("timestamp", ""))
             except:
                 return None
             
-            last_3 = track_history[-3:]
-            last_3_grades = [
+            # Radar Chart 'Heat': Use last 5 sessions for smoothed view [cite: 2025-12-21]
+            last_n = min(5, len(track_history))
+            last_sessions = track_history[-last_n:]
+            last_grades = [
                 entry.get("scores", {}).get("grade", 0)
-                for entry in last_3
-                if isinstance(entry.get("scores", {}).get("grade"), (int, float))
+                for entry in last_sessions
+                if isinstance(entry.get("scores", {}).get("grade"), (int, float)) and entry.get("scores", {}).get("grade", 0) > 0
             ]
             
-            if not last_3_grades:
+            if not last_grades:
                 return None
             
             # Calculate average grade and convert to percentage (grade * 10)
-            avg_grade = sum(last_3_grades) / len(last_3_grades)
+            avg_grade = sum(last_grades) / len(last_grades)
             avg_percent = avg_grade * 10
             
             # Return as dict with all three skills using average (simplified mapping)
@@ -3030,42 +3096,75 @@ def show_progress_dashboard():
         
         if st.button("📥 Download Official Report", type="primary"):
             with st.spinner("Generating PDF report..."):
-                # Generate report
-                report_tool = GeneratePerformanceReport(candidate_id=candidate_id)
-                result = report_tool.run()
-                
-                # Extract file path from result
-                if "Report saved to:" in result:
-                    import re
-                    path_match = re.search(r"Report saved to: (.+)", result)
-                    if path_match:
-                        pdf_path = Path(path_match.group(1))
-                        
-                        if pdf_path.exists():
-                            # Read PDF file
-                            with open(pdf_path, "rb") as pdf_file:
-                                pdf_bytes = pdf_file.read()
+                try:
+                    # PDF Trigger Fix: Pass lesson_history to report_generator [cite: 2025-12-21]
+                    # Load lesson_history from user_progress.json
+                    _, lesson_history_for_report, _ = load_mastery_stats()
+                    
+                    # Generate report
+                    report_tool = GeneratePerformanceReport(candidate_id=candidate_id)
+                    # Store lesson_history in session state for report_generator to access
+                    st.session_state.lesson_history = lesson_history_for_report
+                    result = report_tool.run()
+                    
+                    # Extract file path from result
+                    if "Report saved to:" in result:
+                        import re
+                        path_match = re.search(r"Report saved to: (.+)", result)
+                        if path_match:
+                            pdf_path = Path(path_match.group(1))
                             
-                            # Provide download button
-                            st.success("✅ Report generated successfully!")
-                            st.download_button(
-                                label="📥 Download Sensei Performance Report",
-                                data=pdf_bytes,
-                                file_name=f"sensei_report_{candidate_id}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf",
-                                # Fix datetime import issue - ensure datetime is imported from datetime module
-                                mime="application/pdf",
-                                type="primary",
-                                width='stretch'
-                            )
-                            
-                            # Show summary
-                            st.info(result)
+                            if pdf_path.exists():
+                                # Read PDF file with error handling
+                                try:
+                                    with open(pdf_path, "rb") as pdf_file:
+                                        pdf_bytes = pdf_file.read()
+                                    
+                                    # PDF Generation Fix: Store in session state to keep download button accessible [cite: 2025-12-21]
+                                    if 'pdf_report_bytes' not in st.session_state:
+                                        st.session_state.pdf_report_bytes = None
+                                    if 'pdf_report_filename' not in st.session_state:
+                                        st.session_state.pdf_report_filename = None
+                                    
+                                    st.session_state.pdf_report_bytes = pdf_bytes
+                                    st.session_state.pdf_report_filename = f"sensei_report_{candidate_id}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"
+                                    
+                                    st.success("✅ Report generated successfully!")
+                                    st.info(result)
+                                except Exception as e:
+                                    st.error(f"❌ Failed to read PDF file: {str(e)}")
+                                    import traceback
+                                    if config.DEBUG:
+                                        with st.expander("Debug Info"):
+                                            st.code(traceback.format_exc())
+                            else:
+                                st.error("Report file was not created. Please check the error message above.")
                         else:
-                            st.error("Report file was not created. Please check the error message above.")
+                            st.info(result)
                     else:
-                        st.info(result)
-                else:
-                    st.error(result)
+                        st.error(result)
+                except Exception as e:
+                    st.error(f"❌ Error generating PDF report: {str(e)}")
+                    import traceback
+                    if config.DEBUG:
+                        with st.expander("Debug Info"):
+                            st.code(traceback.format_exc())
+        
+        # PDF Generation Fix: Download button placed outside conditional to remain accessible [cite: 2025-12-21]
+        if 'pdf_report_bytes' not in st.session_state:
+            st.session_state.pdf_report_bytes = None
+        if 'pdf_report_filename' not in st.session_state:
+            st.session_state.pdf_report_filename = None
+        if st.session_state.pdf_report_bytes is not None:
+            st.download_button(
+                label="📥 Download Sensei Performance Report",
+                data=st.session_state.pdf_report_bytes,
+                file_name=st.session_state.pdf_report_filename or f"sensei_report_{candidate_id}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf",
+                mime="application/pdf",
+                type="primary",
+                key="pdf_download_button",
+                use_container_width=True
+            )
     except ImportError as e:
         st.warning(f"Report generator not available: {str(e)}. Please ensure reportlab is installed: pip install reportlab")
     except Exception as e:
@@ -4416,12 +4515,54 @@ def show_academic_hub():
                 if 'academic_competency_response' not in st.session_state:
                     st.session_state.academic_competency_response = ""
                 
-                final_response = st.text_area(
-                    "Your final competency response:",
-                    value=st.session_state.academic_competency_response,
-                    key="academic_final_response",
-                    height=300
+                # Restore Audio in Final Submission: Add audio radio toggle [cite: 2025-12-21]
+                input_method = st.radio(
+                    "Input Method:",
+                    options=["text", "audio"],
+                    format_func=lambda x: "⌨️ Text" if x == "text" else "🎤 Audio",
+                    key="academic_final_input_method_selector",
+                    horizontal=True,
+                    help="Choose how to input your final competency response"
                 )
+                
+                final_response = ""
+                if input_method == "text":
+                    final_response = st.text_area(
+                        "Your final competency response:",
+                        value=st.session_state.academic_competency_response,
+                        key="academic_final_response",
+                        height=300
+                    )
+                else:
+                    # Audio mode for final submission
+                    try:
+                        from streamlit_mic_recorder import mic_recorder
+                        st.markdown("**🎤 Voice Input for Final Response:**")
+                        audio = mic_recorder(
+                            start_prompt="🎤 Start Recording",
+                            stop_prompt="🛑 Stop & Transcribe",
+                            key="academic_final_mic",
+                            use_container_width=True
+                        )
+                        
+                        if audio is not None:
+                            if isinstance(audio, dict) and 'bytes' in audio:
+                                with st.spinner("🎤 Transcribing your voice..."):
+                                    transcribed_text = transcribe_audio_with_gemini(audio['bytes'])
+                                    if transcribed_text and not transcribed_text.startswith("Error"):
+                                        final_response = transcribed_text
+                                        st.session_state.academic_competency_response = transcribed_text
+                                        st.success("✅ Voice transcribed successfully!")
+                                    else:
+                                        st.error("❌ Transcription failed. Please try again.")
+                    except ImportError:
+                        st.warning("Audio recording not available. Please use text input.")
+                        final_response = st.text_area(
+                            "Your final competency response:",
+                            value=st.session_state.academic_competency_response,
+                            key="academic_final_response_fallback",
+                            height=300
+                        )
                 
                 word_count = len(final_response.split()) if final_response else 0
                 st.caption(f"Word count: {word_count} / 3,000")
@@ -4491,15 +4632,6 @@ def show_food_tech_hub():
     Uses same Socratic logic as Academic Hub but restricted to assets/transcripts/food_tech/
     """
     st.markdown('<h2 class="main-header">🍜 Food/Tech Hub - HACCP Mastery</h2>', unsafe_allow_html=True)
-    
-    # Metric Isolation: Display Current Session Vocabulary [cite: 2025-12-21]
-    session_total_words = st.session_state.get('food_tech_session_total_words', 0)
-    st.metric(
-        label="Current Session Vocabulary",
-        value=session_total_words,
-        delta="Target: 3,000"
-    )
-    st.markdown("---")
     
     # Get candidate ID from session state
     if 'selected_candidate_id' not in st.session_state:
@@ -4719,12 +4851,54 @@ def show_food_tech_hub():
                 if 'food_tech_competency_response' not in st.session_state:
                     st.session_state.food_tech_competency_response = ""
                 
-                final_response = st.text_area(
-                    "Your final competency response:",
-                    value=st.session_state.food_tech_competency_response,
-                    key="food_tech_final_response",
-                    height=300
+                # Restore Audio in Final Submission: Add audio radio toggle [cite: 2025-12-21]
+                input_method = st.radio(
+                    "Input Method:",
+                    options=["text", "audio"],
+                    format_func=lambda x: "⌨️ Text" if x == "text" else "🎤 Audio",
+                    key="food_tech_final_input_method_selector",
+                    horizontal=True,
+                    help="Choose how to input your final competency response"
                 )
+                
+                final_response = ""
+                if input_method == "text":
+                    final_response = st.text_area(
+                        "Your final competency response:",
+                        value=st.session_state.food_tech_competency_response,
+                        key="food_tech_final_response",
+                        height=300
+                    )
+                else:
+                    # Audio mode for final submission
+                    try:
+                        from streamlit_mic_recorder import mic_recorder
+                        st.markdown("**🎤 Voice Input for Final Response:**")
+                        audio = mic_recorder(
+                            start_prompt="🎤 Start Recording",
+                            stop_prompt="🛑 Stop & Transcribe",
+                            key="food_tech_final_mic",
+                            use_container_width=True
+                        )
+                        
+                        if audio is not None:
+                            if isinstance(audio, dict) and 'bytes' in audio:
+                                with st.spinner("🎤 Transcribing your voice..."):
+                                    transcribed_text = transcribe_audio_with_gemini(audio['bytes'])
+                                    if transcribed_text and not transcribed_text.startswith("Error"):
+                                        final_response = transcribed_text
+                                        st.session_state.food_tech_competency_response = transcribed_text
+                                        st.success("✅ Voice transcribed successfully!")
+                                    else:
+                                        st.error("❌ Transcription failed. Please try again.")
+                    except ImportError:
+                        st.warning("Audio recording not available. Please use text input.")
+                        final_response = st.text_area(
+                            "Your final competency response:",
+                            value=st.session_state.food_tech_competency_response,
+                            key="food_tech_final_response_fallback",
+                            height=300
+                        )
                 
                 word_count = len(final_response.split()) if final_response else 0
                 st.caption(f"Word count: {word_count} / 3,000")
@@ -4764,15 +4938,6 @@ def show_caregiving_hub():
     Uses same Socratic logic as Academic Hub but restricted to assets/transcripts/care_giving/
     """
     st.markdown('<h2 class="main-header">🏥 Care-giving Hub - Kaigo Mastery</h2>', unsafe_allow_html=True)
-    
-    # Metric Isolation: Display Current Session Vocabulary [cite: 2025-12-21]
-    session_total_words = st.session_state.get('caregiving_session_total_words', 0)
-    st.metric(
-        label="Current Session Vocabulary",
-        value=session_total_words,
-        delta="Target: 3,000"
-    )
-    st.markdown("---")
     
     # Get candidate ID from session state
     if 'selected_candidate_id' not in st.session_state:
@@ -5007,43 +5172,87 @@ def show_caregiving_hub():
                 if 'caregiving_competency_response' not in st.session_state:
                     st.session_state.caregiving_competency_response = ""
                 
-                final_response = st.text_area(
-                    "Your final competency response:",
-                    value=st.session_state.caregiving_competency_response,
-                    key="caregiving_final_response",
-                    height=300
-            )
-            
-            word_count = len(final_response.split()) if final_response else 0
-            st.caption(f"Word count: {word_count} / 3,000")
-            
-            if st.button("🚀 Submit to Sensei", key="caregiving_submit", type="primary"):
-                if final_response:
+                # Restore Audio in Final Submission: Add audio radio toggle [cite: 2025-12-21]
+                input_method = st.radio(
+                    "Input Method:",
+                    options=["text", "audio"],
+                    format_func=lambda x: "⌨️ Text" if x == "text" else "🎤 Audio",
+                    key="caregiving_final_input_method_selector",
+                    horizontal=True,
+                    help="Choose how to input your final competency response"
+                )
+                
+                final_response = ""
+                if input_method == "text":
+                    final_response = st.text_area(
+                        "Your final competency response:",
+                        value=st.session_state.caregiving_competency_response,
+                        key="caregiving_final_response",
+                        height=300
+                    )
+                else:
+                    # Audio mode for final submission
                     try:
-                        from agency.training_agent.competency_grading_tool import CompetencyGradingTool
-                        grading_tool = CompetencyGradingTool()
-                        
-                        grading_result = grading_tool.run(
-                            response=final_response,
-                            candidate_id=candidate_id,
-                            track="Care-giving",  # Category Tagging: Care-giving [cite: 2025-12-21]
-                            language="en",
-                            lesson_name=lesson_name,
-                            session_id=session_id
+                        from streamlit_mic_recorder import mic_recorder
+                        st.markdown("**🎤 Voice Input for Final Response:**")
+                        audio = mic_recorder(
+                            start_prompt="🎤 Start Recording",
+                            stop_prompt="🛑 Stop & Transcribe",
+                            key="caregiving_final_mic",
+                            use_container_width=True
                         )
                         
-                        # Update mastery scores in database based on grading result [cite: 2025-12-21]
-                        if isinstance(grading_result, dict):
-                            update_mastery_scores_from_grading(candidate_id, "Care-giving", grading_result)
-                            st.success("✅ Mastery updated for Care-giving Hub")
-                            question_word_count = grading_result.get('question_word_count', 0)
-                            st.session_state.caregiving_session_total_words = st.session_state.get('caregiving_session_total_words', 0) + question_word_count
-                        
-                        st.success("✅ Assessment Complete!")
-                        if isinstance(grading_result, dict):
-                            st.metric("Overall Grade", f"{grading_result.get('grade', 'N/A')}/10")
-                    except Exception as e:
-                        st.error(f"Error during grading: {str(e)}")
+                        if audio is not None:
+                            if isinstance(audio, dict) and 'bytes' in audio:
+                                with st.spinner("🎤 Transcribing your voice..."):
+                                    transcribed_text = transcribe_audio_with_gemini(audio['bytes'])
+                                    if transcribed_text and not transcribed_text.startswith("Error"):
+                                        final_response = transcribed_text
+                                        st.session_state.caregiving_competency_response = transcribed_text
+                                        st.success("✅ Voice transcribed successfully!")
+                                    else:
+                                        st.error("❌ Transcription failed. Please try again.")
+                    except ImportError:
+                        st.warning("Audio recording not available. Please use text input.")
+                        final_response = st.text_area(
+                            "Your final competency response:",
+                            value=st.session_state.caregiving_competency_response,
+                            key="caregiving_final_response_fallback",
+                            height=300
+                        )
+                
+                word_count = len(final_response.split()) if final_response else 0
+                st.caption(f"Word count: {word_count} / 3,000")
+                
+                if st.button("🚀 Submit to Sensei", key="caregiving_submit", type="primary"):
+                    if final_response:
+                        try:
+                            from agency.training_agent.competency_grading_tool import CompetencyGradingTool
+                            grading_tool = CompetencyGradingTool()
+                            
+                            grading_result = grading_tool.run(
+                                response=final_response,
+                                candidate_id=candidate_id,
+                                track="Care-giving",  # Category Tagging: Care-giving [cite: 2025-12-21]
+                                language="en",
+                                lesson_name=lesson_name,
+                                session_id=session_id
+                            )
+                            
+                            # Update mastery scores in database based on grading result [cite: 2025-12-21]
+                            if isinstance(grading_result, dict):
+                                update_mastery_scores_from_grading(candidate_id, "Care-giving", grading_result)
+                                st.success("✅ Mastery updated for Care-giving Hub")
+                                question_word_count = grading_result.get('question_word_count', 0)
+                                st.session_state.caregiving_session_total_words = st.session_state.get('caregiving_session_total_words', 0) + question_word_count
+                            
+                            st.success("✅ Assessment Complete!")
+                            if isinstance(grading_result, dict):
+                                st.metric("Overall Grade", f"{grading_result.get('grade', 'N/A')}/10")
+                        except Exception as e:
+                            st.error(f"Error during grading: {str(e)}")
+                    else:
+                        st.warning("Please enter your final competency response before submitting.")
 
 
 def show_live_simulator():

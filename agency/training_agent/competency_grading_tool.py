@@ -185,24 +185,104 @@ These guidelines form the foundation of commercial kitchen safety and should be 
                 contents=prompt
             )
             
+            # Grade Extraction: Helper function to extract grade from Sensei response [cite: 2025-12-21]
+            def extract_grade_from_text(text: str) -> Optional[float]:
+                """Extract grade from text, handling formats like 'Score: 8/10' or '8/10'."""
+                extracted_grade = None
+                
+                # First try to parse as JSON
+                try:
+                    parsed = json.loads(text)
+                    if isinstance(parsed, dict) and "grade" in parsed:
+                        grade_val = parsed["grade"]
+                        if isinstance(grade_val, (int, float)) and 0 < grade_val <= 10:
+                            extracted_grade = float(grade_val)
+                except:
+                    pass
+                
+                # Try to find JSON object in text
+                if extracted_grade is None:
+                    json_match = re.search(r'\{[^{}]*"grade"[^{}]*\}', text, re.DOTALL)
+                    if json_match:
+                        try:
+                            parsed = json.loads(json_match.group())
+                            if "grade" in parsed:
+                                grade_val = parsed["grade"]
+                                if isinstance(grade_val, (int, float)) and 0 < grade_val <= 10:
+                                    extracted_grade = float(grade_val)
+                        except:
+                            pass
+                
+                # Try regex pattern for "Score: X/10" or "X/10"
+                if extracted_grade is None:
+                    score_pattern = r'score:\s*(\d+(?:\.\d+)?)/10|"grade"\s*:\s*(\d+(?:\.\d+)?)|\b(\d+(?:\.\d+)?)/10\b'
+                    matches = re.findall(score_pattern, text.lower())
+                    if matches:
+                        for match in matches:
+                            for group in match:
+                                if group:
+                                    try:
+                                        grade_val = float(group)
+                                        if 0 < grade_val <= 10:
+                                            extracted_grade = grade_val
+                                            break
+                                    except:
+                                        continue
+                            if extracted_grade is not None:
+                                break
+                
+                # The Registry Fix: Print [DATA_SYNC] message when grade is extracted [cite: 2025-12-21]
+                if extracted_grade is not None:
+                    print(f"[DATA_SYNC] Track: {track} | Score: {extracted_grade}/10")
+                
+                return extracted_grade
+            
             # Try to parse as JSON, if it fails, extract JSON from text
             try:
                 grading_result = json.loads(response_obj.text)
+                # Validate grade using extraction helper
+                extracted_grade = extract_grade_from_text(response_obj.text)
+                if extracted_grade is not None:
+                    grading_result["grade"] = extracted_grade
             except json.JSONDecodeError:
                 # If response is not pure JSON, try to extract JSON from markdown or text
-                import re
                 json_match = re.search(r'\{[^{}]*"grade"[^{}]*\}', response_obj.text, re.DOTALL)
                 if json_match:
-                    grading_result = json.loads(json_match.group())
+                    try:
+                        grading_result = json.loads(json_match.group())
+                        # Validate grade using extraction helper
+                        extracted_grade = extract_grade_from_text(response_obj.text)
+                        if extracted_grade is not None:
+                            grading_result["grade"] = extracted_grade
+                    except:
+                        # Fallback: use grade extraction
+                        extracted_grade = extract_grade_from_text(response_obj.text)
+                        if extracted_grade is not None:
+                            grading_result = {"grade": extracted_grade, "accuracy_feedback": response_obj.text[:200], "grammar_feedback": "Extracted grade from text"}
+                        else:
+                            grading_result = {"grade": 5, "accuracy_feedback": response_obj.text[:200], "grammar_feedback": "Could not parse JSON response"}
                 else:
-                    # Fallback: return default structure
-                    grading_result = {"grade": 5, "accuracy_feedback": response_obj.text[:200], "grammar_feedback": "Could not parse JSON response"}
+                    # Fallback: use grade extraction
+                    extracted_grade = extract_grade_from_text(response_obj.text)
+                    if extracted_grade is not None:
+                        grading_result = {"grade": extracted_grade, "accuracy_feedback": response_obj.text[:200], "grammar_feedback": "Extracted grade from text"}
+                    else:
+                        grading_result = {"grade": 5, "accuracy_feedback": response_obj.text[:200], "grammar_feedback": "Could not parse JSON response"}
             
             # Granular Tracking: Extract unique vocational words [cite: 2025-07-07]
             question_word_count = self._count_unique_vocational_words(response, transcript_content)
             
+            # Grade Extraction: Convert grade to float if needed [cite: 2025-12-21]
+            raw_grade = grading_result.get("grade", 5)
+            if isinstance(raw_grade, str):
+                # Try to extract from string
+                extracted = extract_grade_from_text(str(raw_grade))
+                grade_value = extracted if extracted is not None else 5
+            else:
+                grade_value = float(raw_grade) if isinstance(raw_grade, (int, float)) else 5
+            
             result = {
-                "grade": int(grading_result.get("grade", 5)),
+                "grade": int(grade_value),
                 "accuracy_feedback": grading_result.get("accuracy_feedback", "No feedback."),
                 "grammar_feedback": grading_result.get("grammar_feedback", "No feedback."),
                 "pronunciation_hint": "Pronunciation not assessed in text-only grading.",

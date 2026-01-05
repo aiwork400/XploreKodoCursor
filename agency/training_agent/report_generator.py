@@ -378,7 +378,7 @@ Be encouraging but honest. Focus on strengths and specific areas for improvement
         
         return career_readiness
 
-    def _generate_pdf_report(self, candidate_id: str, mastery_scores: dict, output_path: str) -> str:
+    def _generate_pdf_report(self, candidate_id: str, mastery_scores: dict, output_path: str, lesson_history: list = None) -> str:
         """Generate PDF report using reportlab - English-only report with standard fonts."""
         if not REPORTLAB_AVAILABLE:
             raise ImportError("reportlab is required for PDF generation. Install with: pip install reportlab")
@@ -718,6 +718,21 @@ Be encouraging but honest. Focus on strengths and specific areas for improvement
             # Calculate mastery scores
             mastery_scores = self._calculate_mastery_scores(self.candidate_id)
             
+            # Repair PDF Generation: Load lesson_history from user_progress.json [cite: 2025-12-21]
+            # Remove word_count calculations and use lesson_history exclusively
+            lesson_history = []
+            try:
+                import json
+                progress_file = Path(__file__).parent.parent.parent / "assets" / "user_progress.json"
+                if progress_file.exists():
+                    with open(progress_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        lesson_history = data.get("lesson_history", [])
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Could not load lesson_history: {e}")
+            
             # Determine output path
             if not self.output_path:
                 reports_dir = Path(__file__).parent.parent.parent / "static" / "reports"
@@ -728,8 +743,8 @@ Be encouraging but honest. Focus on strengths and specific areas for improvement
                 output_path = Path(self.output_path)
                 output_path.parent.mkdir(parents=True, exist_ok=True)
             
-            # Generate PDF
-            pdf_path = self._generate_pdf_report(self.candidate_id, mastery_scores, str(output_path))
+            # Generate PDF with lesson_history data
+            pdf_path = self._generate_pdf_report(self.candidate_id, mastery_scores, str(output_path), lesson_history)
             
             return f"✅ Performance report generated successfully!\n\n📄 Report saved to: {pdf_path}\n\n📊 Summary:\n" + \
                    "\n".join([
