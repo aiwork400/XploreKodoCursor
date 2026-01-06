@@ -14,8 +14,7 @@ Features:
 from __future__ import annotations
 
 import sys
-import datetime as dt
-from datetime import timezone
+import datetime
 from pathlib import Path
 
 # Add project root to path
@@ -458,11 +457,14 @@ Be encouraging but honest. Focus on strengths and specific areas for improvement
         story.append(Paragraph("Sensei Performance Report", title_style))
         story.append(Spacer(1, 0.2*inch))
         
-        # Report metadata
-        report_date = dt.datetime.now(timezone.utc).strftime("%B %d, %Y")
+        # Report metadata - Use primitive datetime for Windows stability [cite: 2025-12-21]
+        import datetime
+        report_date_display = datetime.datetime.now().strftime("%B %d, %Y")
+        # Static Header: Check report_date for None safety [cite: 2025-12-21]
+        header_date = report_date_display if report_date_display else "Date Pending"
         story.append(Paragraph(f"<b>Student:</b> {candidate_name}", styles['Normal']))
         story.append(Paragraph(f"<b>Student ID:</b> {candidate_id}", styles['Normal']))
-        story.append(Paragraph(f"<b>Report Date:</b> {report_date}", styles['Normal']))
+        story.append(Paragraph(f"<b>Report Date:</b> {header_date}", styles['Normal']))
         story.append(Spacer(1, 0.3*inch))
         
         # Visual Chart
@@ -485,10 +487,17 @@ Be encouraging but honest. Focus on strengths and specific areas for improvement
         # Track Performance Summary
         story.append(Paragraph("Track Performance Summary", heading_style))
         
-        # Calculate overall scores per track
+        # Calculate overall scores per track - Safe Get: Handle missing keys [cite: 2025-12-21]
         track_summary_data = [["Track", "Overall Score", "Status"]]
-        for track, skills in mastery_scores.items():
-            avg_score = sum(skills.values()) / len(skills) if skills else 0.0
+        valid_tracks = ["Food/Tech", "Academic", "Care-giving"]
+        for track in valid_tracks:
+            # Safe Get: Default to empty dict if track is missing [cite: 2025-12-21]
+            skills = mastery_scores.get(track, {}) if isinstance(mastery_scores, dict) else {}
+            if isinstance(skills, dict) and skills:
+                avg_score = sum(skills.values()) / len(skills) if skills else 0.0
+            else:
+                avg_score = 0.0
+            
             if avg_score >= 70:
                 status = "Excellent"
             elif avg_score >= 50:
@@ -515,16 +524,30 @@ Be encouraging but honest. Focus on strengths and specific areas for improvement
         story.append(PageBreak())
         story.append(Paragraph("Detailed Performance by Track", heading_style))
         
-        for track, skills in mastery_scores.items():
+        # Safe Get: Iterate through valid tracks only [cite: 2025-12-21]
+        valid_tracks = ["Food/Tech", "Academic", "Care-giving"]
+        for track in valid_tracks:
+            # Safe Get: Default to empty dict if track is missing [cite: 2025-12-21]
+            skills = mastery_scores.get(track, {}) if isinstance(mastery_scores, dict) else {}
+            if not isinstance(skills, dict):
+                skills = {}
+            
             # Track header
             story.append(KeepTogether([
                 Paragraph(f"<b>{track} Track</b>", styles['Heading3']),
                 Spacer(1, 0.1*inch)
             ]))
             
-            # Skill breakdown table
+            # Skill breakdown table - Safe Get: Use safe access for all metrics [cite: 2025-12-21]
             skill_data = [["Skill Category", "Mastery Score", "Level"]]
-            for skill, score in skills.items():
+            # Ensure we have all three pillars even if missing from skills dict
+            valid_skills = ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]
+            for skill in valid_skills:
+                # Safe Get: Default to 0.0 if key is missing [cite: 2025-12-21]
+                # Metric Display Sync: Ensure PDF table uses 100% scale metrics (0-100 range) [cite: 2025-12-21]
+                score = float(skills.get(skill, 0.0)) if isinstance(skills, dict) else 0.0
+                # Clamp to 0-100 range to ensure consistency with Hub displays
+                score = max(0.0, min(100.0, score))
                 if score >= 70:
                     level = "Proficient"
                 elif score >= 50:
@@ -608,11 +631,17 @@ Be encouraging but honest. Focus on strengths and specific areas for improvement
             }
         }
         
-        # Display Career Readiness and Visa Outlook for each track
-        for track, skills in mastery_scores.items():
+        # Display Career Readiness and Visa Outlook for each track - Safe Get [cite: 2025-12-21]
+        valid_tracks = ["Food/Tech", "Academic", "Care-giving"]
+        for track in valid_tracks:
+            # Safe Get: Default to empty dict if track is missing [cite: 2025-12-21]
+            skills = mastery_scores.get(track, {}) if isinstance(mastery_scores, dict) else {}
+            if not isinstance(skills, dict):
+                skills = {}
+            
             avg_score = sum(skills.values()) / len(skills) if skills else 0.0
-            jlpt_level = track_jlpt_levels.get(track, "N5")
-            career_readiness = track_career_readiness.get(track, 0.0)
+            jlpt_level = track_jlpt_levels.get(track, "N5") if isinstance(track_jlpt_levels, dict) else "N5"
+            career_readiness = float(track_career_readiness.get(track, 0.0)) if isinstance(track_career_readiness, dict) else 0.0
             
             story.append(Paragraph(f"<b>{track} Track</b>", styles['Heading3']))
             story.append(Spacer(1, 0.1*inch))
@@ -711,6 +740,11 @@ Be encouraging but honest. Focus on strengths and specific areas for improvement
 
     def run(self) -> str:
         """Generate performance report PDF."""
+        # Use Primitive Datetime: Remove timezone dependency for Windows sub-process stability [cite: 2025-12-21]
+        import datetime
+        report_date = None
+        report_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
         if not REPORTLAB_AVAILABLE:
             return "Error: reportlab is required for PDF generation. Please install it with: pip install reportlab"
         
@@ -720,6 +754,7 @@ Be encouraging but honest. Focus on strengths and specific areas for improvement
             
             # Repair PDF Generation: Load lesson_history from user_progress.json [cite: 2025-12-21]
             # Remove word_count calculations and use lesson_history exclusively
+            # PDF Report "Real Data" Injection: Use same track filter as Radar Chart [cite: 2025-12-21]
             lesson_history = []
             try:
                 import json
@@ -728,23 +763,54 @@ Be encouraging but honest. Focus on strengths and specific areas for improvement
                     with open(progress_file, "r", encoding="utf-8") as f:
                         data = json.load(f)
                         lesson_history = data.get("lesson_history", [])
+                        
+                        # Filter by valid tracks (same as Radar Chart)
+                        valid_tracks = ["Academic", "Food/Tech", "Care-giving"]
+                        lesson_history = [
+                            entry for entry in lesson_history
+                            if entry.get("category") in valid_tracks
+                        ]
             except Exception as e:
                 import logging
                 logger = logging.getLogger(__name__)
                 logger.warning(f"Could not load lesson_history: {e}")
             
+            # PDF Report "Real Data" Injection: Debug print [cite: 2025-12-21]
+            # Get student name for debug
+            try:
+                from database.db_manager import Candidate, SessionLocal
+                db = SessionLocal()
+                try:
+                    candidate = db.query(Candidate).filter(Candidate.candidate_id == self.candidate_id).first()
+                    student_name = candidate.name if candidate else self.candidate_id
+                finally:
+                    db.close()
+            except:
+                student_name = self.candidate_id
+            
+            print(f"DEBUG: PDF generating for {student_name} with {len(lesson_history)} records")
+            
+            # PDF Data Guard: Check if lesson_history is empty [cite: 2025-12-21]
+            if not lesson_history:
+                return "⚠️ No session data found. Please complete a session first before generating a report."
+            
+            # Standardize PDF Output: Use tempfile to prevent Windows file locking [cite: 2025-12-21]
+            import tempfile
+            import shutil
+            
             # Determine output path
             if not self.output_path:
-                reports_dir = Path(__file__).parent.parent.parent / "static" / "reports"
-                reports_dir.mkdir(parents=True, exist_ok=True)
-                timestamp = dt.datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-                output_path = reports_dir / f"sensei_report_{self.candidate_id}_{timestamp}.pdf"
+                # Use tempfile to prevent Windows file locking
+                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf", prefix=f"sensei_report_{self.candidate_id}_")
+                output_path = temp_file.name
+                temp_file.close()
             else:
                 output_path = Path(self.output_path)
                 output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path = str(output_path)
             
             # Generate PDF with lesson_history data
-            pdf_path = self._generate_pdf_report(self.candidate_id, mastery_scores, str(output_path), lesson_history)
+            pdf_path = self._generate_pdf_report(self.candidate_id, mastery_scores, output_path, lesson_history)
             
             return f"✅ Performance report generated successfully!\n\n📄 Report saved to: {pdf_path}\n\n📊 Summary:\n" + \
                    "\n".join([
@@ -753,7 +819,30 @@ Be encouraging but honest. Focus on strengths and specific areas for improvement
                    ])
             
         except Exception as e:
+            # Traceback Safety: Ensure except block doesn't reference variables that might not exist [cite: 2025-12-21]
+            import traceback
             import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Error generating performance report: {e}")
-            return f"Error generating performance report: {str(e)}"
+            try:
+                error_traceback = traceback.format_exc()
+                error_message = f"Error generating performance report: {str(e)}\n\nFull traceback:\n{error_traceback}"
+                logger = logging.getLogger(__name__)
+                logger.error(error_message)
+                return error_message
+            except Exception as fallback_error:
+                # Error Handling: Use primitive datetime instead of timezone to prevent crashes [cite: 2025-12-21]
+                try:
+                    import datetime
+                    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    return f"Error generating performance report: {str(e)}. Additional error in error handler: {str(fallback_error)} [Timestamp: {timestamp}]"
+                except:
+                    # Ultimate fallback - no datetime imports at all
+                    return f"Error generating performance report: {str(e)}. Additional error in error handler: {str(fallback_error)}"
+
+
+# Fix PDF Sub-process Error: Ensure multiprocessing logic is wrapped in if __name__ == "__main__" [cite: 2025-12-21]
+# Note: The ReportGenerator class is already initialized inside the function call (in dashboard/app.py),
+# not at module level, which prevents "pickling" errors during Uvicorn reload.
+if __name__ == "__main__":
+    # Only run multiprocessing code if this module is executed directly
+    # When imported as a module (e.g., by Uvicorn), this block is skipped
+    pass

@@ -1,22 +1,90 @@
 {
     "total_word_count": 0,
-    "lesson_history": [],
-    "sessions": {},
+    "lesson_history": [
+        {
+            "timestamp": "2026-01-05T19:09:51.058165",
+            "lesson": "1. Mastery Test Nursing",
+            "session_id": "264484f3-4df8-48e2-b0db-afaa5adbcae4",
+            "category": "Care-giving",
+            "scores": {
+                "grade": 10,
+                "word_count": 19,
+                "question_word_count": 2,
+                "question_duration": null,
+                "sensei_critique": "The response is unrelated to the provided study material focusing on kitchen and food safety. It seems the student is drawing from a different set of care-giving protocols perhaps related to medication administration or resident monitoring, but that is not what was requested for this study module. The student should review the study material and address the key points: Kitchen Safety Basics, Hygiene Standards, Equipment Safety, and Food Handling.",
+                "weakness_area": "Safety Knowledge",
+                "accuracy_feedback": "The response doesn't demonstrate an understanding of the provided safety guidelines. It focuses on medication and reporting to a head nurse, which isn't directly related to kitchen safety, hygiene, equipment, or food handling as outlined in the study material.",
+                "grammar_feedback": "While the sentence structure is grammatically sound, the insertion of Japanese words without context makes it difficult to follow for someone unfamiliar with Japanese. The mixed language use disrupts the coherence.",
+                "category": "Care-giving"
+            }
+        },
+        {
+            "timestamp": "2026-01-05T15:39:51.084165+00:00",
+            "lesson": "1. Mastery Test Nursing",
+            "session_id": null,
+            "category": "Care-giving",
+            "scores": {
+                "grade": 10,
+                "pillar_scores": {
+                    "Vocabulary": 20.0,
+                    "Tone/Honorifics": 20.0,
+                    "Contextual Logic": 20.0
+                },
+                "vocabulary": 20.0,
+                "tone": 20.0,
+                "logic": 20.0,
+                "accuracy_feedback": "The response doesn't demonstrate an understanding of the provided safety guidelines. It focuses on medication and reporting to a head nurse, which isn't directly related to kitchen safety, hygiene, equipment, or food handling as outlined in the study material.",
+                "grammar_feedback": "While the sentence structure is grammatically sound, the insertion of Japanese words without context makes it difficult to follow for someone unfamiliar with Japanese. The mixed language use disrupts the coherence.",
+                "sensei_critique": "The response is unrelated to the provided study material focusing on kitchen and food safety. It seems the student is drawing from a different set of care-giving protocols perhaps related to medication administration or resident monitoring, but that is not what was requested for this study module. The student should review the study material and address the key points: Kitchen Safety Basics, Hygiene Standards, Equipment Safety, and Food Handling.",
+                "weakness_area": "Safety Knowledge",
+                "question_word_count": 2,
+                "word_count": 0,
+                "lesson_name": "1. Mastery Test Nursing",
+                "category": "Care-giving",
+                "timestamp": "2026-01-05T15:39:51.062161+00:00"
+            }
+        }
+    ],
+    "sessions": {
+        "264484f3-4df8-48e2-b0db-afaa5adbcae4": {
+            "session_start": "2026-01-05T19:09:51.058165",
+            "session_total_words": 2,
+            "session_total_time": 0.0,
+            "questions": [
+                {
+                    "timestamp": "2026-01-05T19:09:51.058165",
+                    "lesson": "1. Mastery Test Nursing",
+                    "scores": {
+                        "grade": 10,
+                        "word_count": 19,
+                        "question_word_count": 2,
+                        "question_duration": null,
+                        "sensei_critique": "The response is unrelated to the provided study material focusing on kitchen and food safety. It seems the student is drawing from a different set of care-giving protocols perhaps related to medication administration or resident monitoring, but that is not what was requested for this study module. The student should review the study material and address the key points: Kitchen Safety Basics, Hygiene Standards, Equipment Safety, and Food Handling.",
+                        "weakness_area": "Safety Knowledge",
+                        "accuracy_feedback": "The response doesn't demonstrate an understanding of the provided safety guidelines. It focuses on medication and reporting to a head nurse, which isn't directly related to kitchen safety, hygiene, equipment, or food handling as outlined in the study material.",
+                        "grammar_feedback": "While the sentence structure is grammatically sound, the insertion of Japanese words without context makes it difficult to follow for someone unfamiliar with Japanese. The mixed language use disrupts the coherence.",
+                        "category": "Care-giving"
+                    }
+                }
+            ],
+            "last_updated": "2026-01-05T19:09:51.058165"
+        }
+    },
     "track_mastery": {
         "Academic": {
-            "vocab": 0.0,
-            "tone": 0.0,
-            "logic": 0.0
+            "vocab": 0,
+            "tone": 0,
+            "logic": 0
         },
         "Food/Tech": {
-            "vocab": 0.0,
-            "tone": 0.0,
-            "logic": 0.0
+            "vocab": 0,
+            "tone": 0,
+            "logic": 0
         },
         "Care-giving": {
-            "vocab": 0.0,
-            "tone": 0.0,
-            "logic": 0.0
+            "vocab": 20.0,
+            "tone": 20.0,
+            "logic": 20.0
         }
     }
 }

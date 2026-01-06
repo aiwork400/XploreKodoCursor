@@ -10,6 +10,10 @@ Provides:
 """
 from __future__ import annotations
 
+# Uvicorn Spawn Fix: Required for Windows apps using Uvicorn to prevent "Spawn" crash [cite: 2025-12-21]
+import multiprocessing
+multiprocessing.freeze_support()
+
 import sys
 from pathlib import Path
 
@@ -1302,7 +1306,7 @@ def render_unified_chat_interface(
     
     # Start discussion button (only if chat is empty)
     if len(chat_history) == 0:
-        if st.button("💬 Start Socratic Discussion", key=f"start_{track_safe}_discussion", type="primary", use_container_width=True):
+        if st.button("💬 Start Socratic Discussion", key=f"start_{track_safe}_discussion", type="primary"):
             # Dynamic Syllabus Trigger: Generate track-specific Socratic opening question [cite: 2025-12-20, 2025-12-21]
             initial_greeting_prompt = f"""Greeting: English first, then Japanese, then Nepali. Then ask one Socratic question about "{lesson_name}" based on the transcript.
 
@@ -1378,7 +1382,7 @@ def render_unified_chat_interface(
                 start_prompt="🎤 Start Recording",
                 stop_prompt="🛑 Stop & Transcribe",
                 key=f"{track_safe}_mic",  # Track-specific key for mic_recorder [cite: 2025-12-21]
-                use_container_width=True
+                width='stretch'
             )
             
             # Microphone Status: Recording indicator placed directly above chat input area [cite: 2025-12-21]
@@ -1511,7 +1515,7 @@ def render_unified_chat_interface(
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("➡️ Next Question", key=f"next_question_{track.lower().replace('/', '_')}", use_container_width=True):
+            if st.button("➡️ Next Question", key=f"next_question_{track.lower().replace('/', '_')}"):
                 # Generate follow-up question based on conversation history and transcript [cite: 2025-12-20, 2025-12-21]
                 next_question_prompt = f"""Based on the conversation history below, generate a follow-up Socratic question that:
 1. Builds on the student's previous responses
@@ -1544,7 +1548,7 @@ def render_unified_chat_interface(
                     st.rerun()
         
         with col2:
-            if st.button("⏹️ Stop Session", key=f"stop_session_{track.lower().replace('/', '_')}", use_container_width=True):
+            if st.button("⏹️ Stop Session", key=f"stop_session_{track.lower().replace('/', '_')}"):
                 # Mark session as stopped to allow jumping to Final Competency Submission [cite: 2025-12-21]
                 st.session_state[f"{track.lower().replace('/', '_')}_session_stopped"] = True
                 st.rerun()
@@ -1628,6 +1632,235 @@ def transcribe_audio_with_gemini(audio_bytes: bytes) -> str:
         return f"Error transcribing audio: {str(e)}"
 
 
+def get_session_metrics(track_name: str, candidate_id: str, fallback_package: dict = None):
+    """
+    Fix the 'Session Metrics' Display: Look at last_grading_result or PostgreSQL [cite: 2025-12-21]
+    
+    Returns session metrics from:
+    1. st.session_state.last_grading_result (if category matches)
+    2. st.session_state.{track}_last_grading_result
+    3. PostgreSQL lesson_history (last entry for this track)
+    4. fallback_package (if provided)
+    """
+    # First, try st.session_state.last_grading_result
+    last_result = st.session_state.get('last_grading_result')
+    if last_result and last_result.get('category') == track_name:
+        return last_result
+    
+    # Try track-specific last_grading_result
+    track_safe = track_name.lower().replace('/', '_').replace('-', '_')
+    track_result = st.session_state.get(f"{track_safe}_last_grading_result")
+    if track_result:
+        return track_result
+    
+    # Fallback: Pull from PostgreSQL lesson_history
+    try:
+        from database.db_manager import CurriculumProgress, SessionLocal
+        db = SessionLocal()
+        try:
+            curriculum = db.query(CurriculumProgress).filter(
+                CurriculumProgress.candidate_id == candidate_id
+            ).first()
+            if curriculum and curriculum.dialogue_history:
+                import json
+                dialogue_history = curriculum.dialogue_history
+                if isinstance(dialogue_history, str):
+                    dialogue_history = json.loads(dialogue_history)
+                
+                # Get the last entry for this track
+                for entry in reversed(dialogue_history):
+                    if entry.get("category") == track_name:
+                        scores = entry.get("scores", {})
+                        return {
+                            "grade": scores.get("grade", 50.0),
+                            "vocabulary": scores.get("pillar_scores", {}).get("Vocabulary", scores.get("grade", 50.0)),
+                            "tone": scores.get("pillar_scores", {}).get("Tone/Honorifics", scores.get("grade", 50.0)),
+                            "logic": scores.get("pillar_scores", {}).get("Contextual Logic", scores.get("grade", 50.0))
+                        }
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[METRICS_ERROR] Failed to get from PostgreSQL: {e}")
+    
+    # Final fallback: use provided fallback_package
+    return fallback_package or {"grade": 0.0, "vocabulary": 0.0, "tone": 0.0, "logic": 0.0}
+
+
+def sync_academic_record(score_dict: dict, candidate_id: str, track: str, lesson_name: str, session_id: str = None):
+    """
+    STRICT ARCHITECTURAL OVERHAUL: The Atomic Save Function [cite: 2025-12-21]
+    
+    MUST write to PostgreSQL AND user_progress.json AND st.session_state simultaneously.
+    MUST call db.commit() explicitly.
+    
+    Args:
+        score_dict: Dictionary with grade, pillar_scores, and all metrics
+        candidate_id: Candidate identifier
+        track: Track name (Academic, Food/Tech, Care-giving)
+        lesson_name: Name of the lesson
+        session_id: Optional session ID
+    """
+    try:
+        from database.db_manager import CurriculumProgress, SessionLocal
+        import json
+        import os
+        
+        # 1. Write to PostgreSQL
+        db = SessionLocal()
+        try:
+            curriculum = db.query(CurriculumProgress).filter(
+                CurriculumProgress.candidate_id == candidate_id
+            ).first()
+            
+            if curriculum:
+                # Update mastery_scores in PostgreSQL
+                mastery_scores = curriculum.mastery_scores
+                if mastery_scores is None:
+                    mastery_scores = {}
+                elif isinstance(mastery_scores, str):
+                    try:
+                        mastery_scores = json.loads(mastery_scores)
+                    except json.JSONDecodeError:
+                        mastery_scores = {}
+                elif not isinstance(mastery_scores, dict):
+                    mastery_scores = {}
+                
+                # Initialize track if needed
+                if track not in mastery_scores:
+                    mastery_scores[track] = {}
+                
+                # Update scores (already in 0-100 format)
+                grade = score_dict.get('grade', 50.0)
+                pillar_scores = score_dict.get('pillar_scores', {})
+                valid_skills = ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]
+                
+                for skill in valid_skills:
+                    skill_score = float(pillar_scores.get(skill, grade))
+                    current_score = float(mastery_scores[track].get(skill, 0.0))
+                    new_score = min(100.0, (current_score + skill_score) / 2.0)
+                    mastery_scores[track][skill] = round(new_score, 1)
+                
+                curriculum.mastery_scores = mastery_scores
+                db.add(curriculum)
+                db.commit()  # Explicit commit
+                db.refresh(curriculum)
+        finally:
+            db.close()
+        
+        # 2. Write to user_progress.json
+        try:
+            progress_file = Path("assets/user_progress.json")
+            os.makedirs("assets", exist_ok=True)
+            
+            if progress_file.exists():
+                with open(progress_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            else:
+                data = {
+                    "total_word_count": 0,
+                    "lesson_history": [],
+                    "sessions": {},
+                    "track_mastery": {
+                        "Academic": {"vocab": 0, "tone": 0, "logic": 0},
+                        "Food/Tech": {"vocab": 0, "tone": 0, "logic": 0},
+                        "Care-giving": {"vocab": 0, "tone": 0, "logic": 0}
+                    }
+                }
+            
+            # Add to lesson_history
+            new_entry = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "lesson": lesson_name,
+                "session_id": session_id,
+                "category": track,
+                "scores": score_dict
+            }
+            data["lesson_history"].append(new_entry)
+            
+            # Update track_mastery
+            if track not in data["track_mastery"]:
+                data["track_mastery"][track] = {"vocab": 0, "tone": 0, "logic": 0}
+            
+            pillar_scores = score_dict.get('pillar_scores', {})
+            data["track_mastery"][track]["vocab"] = pillar_scores.get("Vocabulary", score_dict.get('grade', 50.0))
+            data["track_mastery"][track]["tone"] = pillar_scores.get("Tone/Honorifics", score_dict.get('grade', 50.0))
+            data["track_mastery"][track]["logic"] = pillar_scores.get("Contextual Logic", score_dict.get('grade', 50.0))
+            
+            with open(progress_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4, ensure_ascii=False)
+        except Exception as e:
+            print(f"[SYNC_ERROR] Failed to write to user_progress.json: {e}")
+        
+        # 3. Update st.session_state
+        track_safe = track.lower().replace('/', '_').replace('-', '_')
+        st.session_state[f"{track_safe}_last_grading_result"] = score_dict
+        st.session_state[f"{track_safe}_last_grade"] = score_dict.get('grade', 50.0)
+        st.session_state[f"{track_safe}_last_pillar_scores"] = score_dict.get('pillar_scores', {})
+        st.session_state['last_grading_result'] = score_dict
+        
+    except Exception as e:
+        print(f"[SYNC_ERROR] Atomic save failed: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def finalize_session_grading(
+    candidate_id: str,
+    track: str,
+    grading_result: dict,
+    lesson_name: str,
+    session_id: str = None
+) -> dict:
+    """
+    Unified Session Package: Finalize grading for all three hubs [cite: 2025-12-21]
+    
+    Extracts Main Grade and Pillar Scores (Vocab, Tone, Logic), saves to PostgreSQL,
+    and updates session state for immediate UI display.
+    
+    Args:
+        candidate_id: Candidate identifier
+        track: Track name (Academic, Food/Tech, Care-giving)
+        grading_result: Dictionary with grade, pillar_scores, accuracy_feedback, etc.
+        lesson_name: Name of the lesson
+        session_id: Optional session ID
+        
+    Returns:
+        Dictionary with session package: grade, pillar_scores, and all metrics
+    """
+    # Extract Main Grade and Pillar Scores (Global Migration to Percentage-Based Grading: 0-100) [cite: 2025-12-21]
+    main_grade = grading_result.get('grade', 50.0)  # Default to 50% instead of 5/10
+    pillar_scores = grading_result.get('pillar_scores', {})
+    
+    # Ensure pillar_scores has all three pillars (Tri-Pillar Distribution)
+    valid_skills = ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]
+    for skill in valid_skills:
+        if skill not in pillar_scores or pillar_scores[skill] is None:
+            pillar_scores[skill] = main_grade  # Distribute main grade if missing
+    
+    # Create session package dictionary
+    session_package = {
+        "grade": main_grade,
+        "pillar_scores": pillar_scores,
+        "vocabulary": pillar_scores.get("Vocabulary", main_grade),
+        "tone": pillar_scores.get("Tone/Honorifics", main_grade),
+        "logic": pillar_scores.get("Contextual Logic", main_grade),
+        "accuracy_feedback": grading_result.get('accuracy_feedback', ''),
+        "grammar_feedback": grading_result.get('grammar_feedback', ''),
+        "sensei_critique": grading_result.get('sensei_critique', ''),
+        "weakness_area": grading_result.get('weakness_area', 'Other'),
+        "question_word_count": grading_result.get('question_word_count', 0),
+        "word_count": grading_result.get('word_count', 0),
+        "lesson_name": lesson_name,
+        "category": track,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # STRICT ARCHITECTURAL OVERHAUL: Use atomic save function [cite: 2025-12-21]
+    sync_academic_record(session_package, candidate_id, track, lesson_name, session_id)
+    
+    return session_package
+
+
 def update_mastery_scores_from_grading(candidate_id: str, track: str, grading_result: dict):
     """
     Update mastery scores in database based on grading result.
@@ -1667,34 +1900,55 @@ def update_mastery_scores_from_grading(candidate_id: str, track: str, grading_re
             if track not in mastery_scores:
                 mastery_scores[track] = {}
             
-            # Convert grade (1-10) to mastery percentage (0-100)
-            grade = grading_result.get('grade', 5)
-            mastery_increment = (grade / 10.0) * 10.0  # 1-10 grade -> 1-10% increment
+            # Global Migration to Percentage-Based Grading (0-100): Grades are already in percentage format [cite: 2025-12-21]
+            grade = grading_result.get('grade', 50.0)  # Default to 50% instead of 5/10
             
-            # Determine which skills to update based on feedback
-            affected_skills = []
-            accuracy_feedback = grading_result.get('accuracy_feedback', '').lower()
-            grammar_feedback = grading_result.get('grammar_feedback', '').lower()
+            # Tri-Pillar Distribution: Use pillar_scores if available, otherwise distribute main grade [cite: 2025-12-21]
+            pillar_scores = grading_result.get('pillar_scores', {})
             
-            # Map feedback to skills
-            if 'vocabulary' in accuracy_feedback or 'vocabulary' in grammar_feedback:
-                affected_skills.append("Vocabulary")
-            if 'tone' in accuracy_feedback or 'honorific' in accuracy_feedback or 'tone' in grammar_feedback:
-                affected_skills.append("Tone/Honorifics")
-            if 'logic' in accuracy_feedback or 'context' in accuracy_feedback or 'logic' in grammar_feedback:
-                affected_skills.append("Contextual Logic")
-            
-            # If no specific skills identified, update all skills
-            if not affected_skills:
-                affected_skills = ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]
-            
-            # Update scores for affected skills
+            # Valid skill names matching Radar Chart expectations
             valid_skills = ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]
-            for skill in affected_skills:
-                if skill in valid_skills:
-                    current_score = float(mastery_scores[track].get(skill, 0.0))
-                    new_score = min(100.0, current_score + mastery_increment)
-                    mastery_scores[track][skill] = round(new_score, 1)
+            
+            # If pillar_scores are provided, use them directly (already in 0-100 format)
+            if pillar_scores and isinstance(pillar_scores, dict):
+                for skill in valid_skills:
+                    if skill in pillar_scores:
+                        # Pillar scores are already in percentage format (0-100)
+                        pillar_grade = float(pillar_scores[skill])
+                        if 0 <= pillar_grade <= 100:
+                            current_score = float(mastery_scores[track].get(skill, 0.0))
+                            # Average with existing score for smooth progression
+                            new_score = min(100.0, (current_score + pillar_grade) / 2.0)
+                            mastery_scores[track][skill] = round(new_score, 1)
+                    else:
+                        # If pillar score missing, use main grade
+                        current_score = float(mastery_scores[track].get(skill, 0.0))
+                        new_score = min(100.0, (current_score + float(grade)) / 2.0)
+                        mastery_scores[track][skill] = round(new_score, 1)
+            else:
+                # Fallback: Determine which skills to update based on feedback
+                affected_skills = []
+                accuracy_feedback = grading_result.get('accuracy_feedback', '').lower()
+                grammar_feedback = grading_result.get('grammar_feedback', '').lower()
+                
+                # Map feedback to skills
+                if 'vocabulary' in accuracy_feedback or 'vocabulary' in grammar_feedback:
+                    affected_skills.append("Vocabulary")
+                if 'tone' in accuracy_feedback or 'honorific' in accuracy_feedback or 'tone' in grammar_feedback:
+                    affected_skills.append("Tone/Honorifics")
+                if 'logic' in accuracy_feedback or 'context' in accuracy_feedback or 'logic' in grammar_feedback:
+                    affected_skills.append("Contextual Logic")
+                
+                # If no specific skills identified, update all skills (Tri-Pillar Distribution)
+                if not affected_skills:
+                    affected_skills = ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]
+                
+                # Update scores for affected skills (grade is already in 0-100 format)
+                for skill in affected_skills:
+                    if skill in valid_skills:
+                        current_score = float(mastery_scores[track].get(skill, 0.0))
+                        new_score = min(100.0, (current_score + float(grade)) / 2.0)
+                        mastery_scores[track][skill] = round(new_score, 1)
             
             # Save to database
             curriculum.mastery_scores = mastery_scores
@@ -2609,7 +2863,7 @@ def show_progress_dashboard():
             except:
                 pass  # Keep original format if parsing fails
             
-            st.dataframe(activity_df, use_container_width=True, hide_index=True)
+            st.dataframe(activity_df, width='stretch', hide_index=True)
     else:
         st.info("No lesson history available yet. Complete lessons to see your progress!")
     
@@ -2890,7 +3144,7 @@ def show_progress_dashboard():
         
         # Radar Chart Fallback: If track_mastery JSON is empty, pull from lesson_history [cite: 2025-12-21]
         def get_radar_scores_from_history(track_name):
-            """Get radar chart scores from lesson_history if track_mastery is empty."""
+            """Get radar chart scores from lesson_history if track_mastery is empty. Radar Chart 'Day 1' Fix [cite: 2025-12-21]"""
             from datetime import datetime
             
             # Filter by track
@@ -2902,54 +3156,133 @@ def show_progress_dashboard():
             if len(track_history) < 1:
                 return None  # Not enough data
             
-            # Sort by timestamp and get last 5 sessions (Radar Chart 'Heat': smoothed view) [cite: 2025-12-21]
+            # Sort by timestamp ASCENDING (oldest first) [cite: 2025-12-21]
             try:
                 track_history.sort(key=lambda x: x.get("timestamp", ""))
             except:
                 return None
             
+            # Radar Chart 'Day 1' Fix: Pull from last entry if cumulative JSON is empty [cite: 2025-12-21]
+            # If only one session exists, use that session's pillar scores directly
+            if len(track_history) == 1:
+                last_entry = track_history[-1]
+                scores = last_entry.get("scores", {})
+                
+                # Try to extract pillar scores from the entry
+                pillar_scores = scores.get("pillar_scores", {})
+                if pillar_scores:
+                    # Radar Sync Verification: Debug logging to verify key matching [cite: 2025-12-21]
+                    print(f"DEBUG: Found pillar_scores in entry: {pillar_scores}")
+                    print(f"DEBUG: Keys in pillar_scores: {list(pillar_scores.keys()) if isinstance(pillar_scores, dict) else 'Not a dict'}")
+                    
+                    # Radar Chart "Blossom": Scores are already in 0-100 format, do NOT divide by 10 again [cite: 2025-12-21]
+                    # If the value is 20.0, it should plot at the 20% mark on the 0-100 scale
+                    result = {
+                        "Vocabulary": float(pillar_scores.get("Vocabulary", scores.get("grade", 50.0))),
+                        "Tone/Honorifics": float(pillar_scores.get("Tone/Honorifics", scores.get("grade", 50.0))),
+                        "Contextual Logic": float(pillar_scores.get("Contextual Logic", scores.get("grade", 50.0)))
+                    }
+                    # Ensure values are in 0-100 range (clamp if needed)
+                    result = {k: max(0.0, min(100.0, v)) for k, v in result.items()}
+                    print(f"DEBUG: Processing scores for Radar (single session): {result}")
+                    print(f"DEBUG: Radar Chart values (should be 0-100): {list(result.values())}")
+                    return result
+                else:
+                    # Fallback: use main grade for all pillars (already in 0-100 format)
+                    main_grade = float(scores.get("grade", 50.0))
+                    result = {
+                        "Vocabulary": main_grade,
+                        "Tone/Honorifics": main_grade,
+                        "Contextual Logic": main_grade
+                    }
+                    # Ensure values are in 0-100 range
+                    result = {k: max(0.0, min(100.0, v)) for k, v in result.items()}
+                    print(f"DEBUG: No pillar_scores found, using main grade {main_grade}% for all pillars: {result}")
+                    return result
+            
             # Radar Chart 'Heat': Use last 5 sessions for smoothed view [cite: 2025-12-21]
             last_n = min(5, len(track_history))
             last_sessions = track_history[-last_n:]
-            last_grades = [
-                entry.get("scores", {}).get("grade", 0)
-                for entry in last_sessions
-                if isinstance(entry.get("scores", {}).get("grade"), (int, float)) and entry.get("scores", {}).get("grade", 0) > 0
-            ]
             
-            if not last_grades:
+            # Extract pillar scores from last sessions
+            vocab_scores = []
+            tone_scores = []
+            logic_scores = []
+            
+            for entry in last_sessions:
+                scores = entry.get("scores", {})
+                pillar_scores = scores.get("pillar_scores", {})
+                
+                if pillar_scores:
+                    # Global Migration to Percentage-Based Grading (0-100): Scores are already in percentage format [cite: 2025-12-21]
+                    vocab_scores.append(float(pillar_scores.get("Vocabulary", scores.get("grade", 50.0))))
+                    tone_scores.append(float(pillar_scores.get("Tone/Honorifics", scores.get("grade", 50.0))))
+                    logic_scores.append(float(pillar_scores.get("Contextual Logic", scores.get("grade", 50.0))))
+                else:
+                    # Fallback: use main grade (already in percentage format)
+                    main_grade = float(scores.get("grade", 50.0))
+                    vocab_scores.append(main_grade)
+                    tone_scores.append(main_grade)
+                    logic_scores.append(main_grade)
+            
+            if not vocab_scores:
                 return None
             
-            # Calculate average grade and convert to percentage (grade * 10)
-            avg_grade = sum(last_grades) / len(last_grades)
-            avg_percent = avg_grade * 10
-            
-            # Return as dict with all three skills using average (simplified mapping)
-            return {
-                "Vocabulary": avg_percent,
-                "Tone/Honorifics": avg_percent,
-                "Contextual Logic": avg_percent
+            # Radar Chart "Blossom": Calculate averages (scores are already in 0-100 format) [cite: 2025-12-21]
+            # Do NOT multiply by 10 - values are already percentages
+            result = {
+                "Vocabulary": sum(vocab_scores) / len(vocab_scores),
+                "Tone/Honorifics": sum(tone_scores) / len(tone_scores),
+                "Contextual Logic": sum(logic_scores) / len(logic_scores)
             }
+            # Ensure values are in 0-100 range (clamp if needed)
+            result = {k: max(0.0, min(100.0, v)) for k, v in result.items()}
+            
+            # Radar Sync Verification: Debug logging to verify key matching [cite: 2025-12-21]
+            print(f"DEBUG: Processing scores for Radar: {result}")
+            print(f"DEBUG: Keys in result: {list(result.keys())}")
+            print(f"DEBUG: Expected keys: ['Vocabulary', 'Tone/Honorifics', 'Contextual Logic']")
+            print(f"DEBUG: Radar Chart values (should be 0-100): {list(result.values())}")
+            
+            return result
         
         # Create radar chart data
         fig_radar = go.Figure()
         
         for track in tracks:
-            # Check if track_mastery is empty (all values 0)
-            track_data_empty = (
-                track in track_mastery_json and
-                all(v == 0 for v in track_mastery_json[track].values())
-            )
+            # Radar Chart 'Day 1' Fix: Check if track_mastery is empty OR if mastery_scores from DB is empty [cite: 2025-12-21]
+            track_data_empty = False
             
-            # Use lesson_history fallback if track_mastery is empty
+            # Check track_mastery JSON first
+            if track in track_mastery_json:
+                track_data_empty = all(v == 0.0 or v == 0 for v in track_mastery_json[track].values())
+            else:
+                track_data_empty = True
+            
+            # Also check mastery_scores from database
+            if not track_data_empty:
+                db_track_data = mastery_scores.get(track, {})
+                if not db_track_data or all(v == 0.0 for v in db_track_data.values()):
+                    track_data_empty = True
+            
+            # Use lesson_history fallback if track_mastery is empty (Radar Chart 'Day 1' Fix) [cite: 2025-12-21]
             if track_data_empty:
                 fallback_scores = get_radar_scores_from_history(track)
                 if fallback_scores:
+                    # Radar Sync Verification: Debug logging to verify key matching [cite: 2025-12-21]
+                    print(f"DEBUG: Using fallback scores for {track}: {fallback_scores}")
+                    print(f"DEBUG: Fallback keys: {list(fallback_scores.keys())}")
+                    print(f"DEBUG: Expected skills: {skills}")
                     radar_values = [fallback_scores.get(skill, 0.0) for skill in skills]
+                    print(f"DEBUG: Radar values for {track}: {radar_values}")
                 else:
-                    radar_values = [mastery_scores[track].get(skill, 0.0) for skill in skills]
+                    # Final fallback: use mastery_scores from DB (should be 0.0 if empty)
+                    radar_values = [mastery_scores.get(track, {}).get(skill, 0.0) for skill in skills]
+                    print(f"DEBUG: No fallback scores, using DB mastery_scores for {track}: {radar_values}")
             else:
-                radar_values = [mastery_scores[track].get(skill, 0.0) for skill in skills]
+                # Use mastery_scores from database (primary source)
+                radar_values = [mastery_scores.get(track, {}).get(skill, 0.0) for skill in skills]
+                print(f"DEBUG: Using DB mastery_scores for {track}: {radar_values}")
             
             fig_radar.add_trace(go.Scatterpolar(
                 r=radar_values,
@@ -3046,7 +3379,7 @@ def show_progress_dashboard():
                 # Fallback table
                 date_track_df = pd.DataFrame(date_track_counts).T
                 date_track_df = date_track_df.reindex(columns=tracks, fill_value=0)
-                st.dataframe(date_track_df, use_container_width=True)
+                st.dataframe(date_track_df, width='stretch')
     
     st.markdown("---")
     
@@ -3101,11 +3434,18 @@ def show_progress_dashboard():
                     # Load lesson_history from user_progress.json
                     _, lesson_history_for_report, _ = load_mastery_stats()
                     
-                    # Generate report
+                    # Fix PDF Sub-process Error: Initialize ReportGenerator inside function call, not at module level [cite: 2025-12-21]
+                    # This prevents "pickling" errors during Uvicorn reload
                     report_tool = GeneratePerformanceReport(candidate_id=candidate_id)
                     # Store lesson_history in session state for report_generator to access
                     st.session_state.lesson_history = lesson_history_for_report
                     result = report_tool.run()
+                    
+                    # PDF Recovery: Display full traceback if error occurs [cite: 2025-12-21]
+                    if "Error" in result or "traceback" in result.lower():
+                        st.error("❌ PDF Generation Failed")
+                        st.code(result, language="text")
+                        st.stop()
                     
                     # Extract file path from result
                     if "Report saved to:" in result:
@@ -3115,10 +3455,17 @@ def show_progress_dashboard():
                             pdf_path = Path(path_match.group(1))
                             
                             if pdf_path.exists():
-                                # Read PDF file with error handling
+                                # Force Byte-Stream: Use BytesIO for Windows compatibility [cite: 2025-12-21]
                                 try:
+                                    from io import BytesIO
+                                    import datetime as dt_module
+                                    
                                     with open(pdf_path, "rb") as pdf_file:
                                         pdf_bytes = pdf_file.read()
+                                    
+                                    # Convert to BytesIO stream for better Windows compatibility
+                                    pdf_stream = BytesIO(pdf_bytes)
+                                    pdf_stream.seek(0)  # Reset stream position
                                     
                                     # PDF Generation Fix: Store in session state to keep download button accessible [cite: 2025-12-21]
                                     if 'pdf_report_bytes' not in st.session_state:
@@ -3126,8 +3473,9 @@ def show_progress_dashboard():
                                     if 'pdf_report_filename' not in st.session_state:
                                         st.session_state.pdf_report_filename = None
                                     
-                                    st.session_state.pdf_report_bytes = pdf_bytes
-                                    st.session_state.pdf_report_filename = f"sensei_report_{candidate_id}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"
+                                    # Store bytes (BytesIO.getvalue() or use bytes directly)
+                                    st.session_state.pdf_report_bytes = pdf_bytes  # Streamlit accepts bytes directly
+                                    st.session_state.pdf_report_filename = f"sensei_report_{candidate_id}_{dt_module.datetime.now().strftime('%Y%m%d')}.pdf"
                                     
                                     st.success("✅ Report generated successfully!")
                                     st.info(result)
@@ -3159,11 +3507,11 @@ def show_progress_dashboard():
             st.download_button(
                 label="📥 Download Sensei Performance Report",
                 data=st.session_state.pdf_report_bytes,
-                file_name=st.session_state.pdf_report_filename or f"sensei_report_{candidate_id}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf",
+                file_name=st.session_state.pdf_report_filename or f"sensei_report_{candidate_id}_{datetime.now().strftime('%Y%m%d')}.pdf",
                 mime="application/pdf",
                 type="primary",
                 key="pdf_download_button",
-                use_container_width=True
+                width='stretch'
             )
     except ImportError as e:
         st.warning(f"Report generator not available: {str(e)}. Please ensure reportlab is installed: pip install reportlab")
@@ -3325,7 +3673,7 @@ def show_video_hub():
                         start_prompt="🎤 Start Recording",
                         stop_prompt="🛑 Stop & Transcribe",
                         key="sensei_audio_recorder_sidebar",
-                        use_container_width=True
+                        width='stretch'
                     )
                     
                     # Process audio when recording stops
@@ -3607,7 +3955,7 @@ def show_video_hub():
                         "🚀 Submit to Sensei",
                         key="submit_final_response",
                         type="primary",
-                        use_container_width=True,
+                        width='stretch',
                         disabled=word_count == 0 or word_count > max_words
                     )
                 
@@ -3650,7 +3998,15 @@ def show_video_hub():
                                     st.markdown("### 📊 Grading Results")
                                     col_grade1, col_grade2 = st.columns(2)
                                     with col_grade1:
-                                        st.metric("Overall Grade", f"{grading_result.get('grade', 'N/A')}/10")
+                                        # Metric Clarity: Show % sign explicitly [cite: 2025-12-21]
+                                        grade_value = grading_result.get('grade', 0.0)
+                                        if isinstance(grade_value, (int, float)):
+                                            # Convert to percentage if in 0-10 range, otherwise assume already percentage
+                                            if grade_value <= 10:
+                                                grade_value = grade_value * 10.0
+                                            st.metric("Overall Grade", f"{grade_value:.1f}%")
+                                        else:
+                                            st.metric("Overall Grade", "N/A")
                                     with col_grade2:
                                         st.info(f"**Accuracy:** {grading_result.get('accuracy_feedback', 'No feedback')}")
                                     st.info(f"**Grammar:** {grading_result.get('grammar_feedback', 'No feedback')}")
@@ -3660,7 +4016,7 @@ def show_video_hub():
                                 
                                 # Auto-Navigation: Add button in success message [cite: 2025-12-21]
                                 st.markdown("---")
-                                if st.button("📊 View My Mastery Progress", key="view_mastery_progress_video", use_container_width=True):
+                                if st.button("📊 View My Mastery Progress", key="view_mastery_progress_video"):
                                     # Set sidebar selection to Progress page [cite: 2025-12-21]
                                     st.session_state.page = "Progress"
                                     st.session_state.current_page = "Progress"
@@ -4236,6 +4592,49 @@ def show_academic_hub():
     
     candidate_id = st.session_state.selected_candidate_id
     
+    # Force UI Update on Hub Load: Pull from atomic save location immediately [cite: 2025-12-21]
+    # If st.session_state.last_grading_result is empty, perform quick SELECT from lesson_history
+    if 'last_grading_result' not in st.session_state or not st.session_state.get('last_grading_result'):
+        # Quick SELECT from PostgreSQL lesson_history for this track
+        try:
+            from database.db_manager import CurriculumProgress, SessionLocal
+            import json
+            db = SessionLocal()
+            try:
+                curriculum = db.query(CurriculumProgress).filter(
+                    CurriculumProgress.candidate_id == candidate_id
+                ).first()
+                if curriculum and curriculum.dialogue_history:
+                    dialogue_history = curriculum.dialogue_history
+                    if isinstance(dialogue_history, str):
+                        dialogue_history = json.loads(dialogue_history)
+                    
+                    # Get the last entry for Academic track
+                    for entry in reversed(dialogue_history):
+                        if entry.get("category") == "Academic":
+                            scores = entry.get("scores", {})
+                            st.session_state['last_grading_result'] = {
+                                "grade": scores.get("grade", 50.0),
+                                "vocabulary": scores.get("pillar_scores", {}).get("Vocabulary", scores.get("grade", 50.0)),
+                                "tone": scores.get("pillar_scores", {}).get("Tone/Honorifics", scores.get("grade", 50.0)),
+                                "logic": scores.get("pillar_scores", {}).get("Contextual Logic", scores.get("grade", 50.0)),
+                                "category": "Academic"
+                            }
+                            break
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[UI_UPDATE_ERROR] Failed to load from PostgreSQL: {e}")
+    
+    # Clear Session State on Track Switch: Clear messages when switching tracks [cite: 2025-12-21]
+    if 'current_track' not in st.session_state:
+        st.session_state.current_track = "Academic"
+    elif st.session_state.current_track != "Academic":
+        # Track switched - clear messages
+        if 'messages' in st.session_state:
+            del st.session_state.messages
+        st.session_state.current_track = "Academic"
+    
     # --- Sidebar Controls (mirroring Video Hub structure) ---
     with st.sidebar:
         st.header("Academic Hub Controls")
@@ -4297,7 +4696,7 @@ def show_academic_hub():
         st.subheader("📚 Knowledge Resources")
         
         # 1. View Lesson Syllabus Button [cite: 2025-12-20]
-        if st.button("📋 View Lesson Syllabus", key="view_syllabus_btn", use_container_width=True):
+        if st.button("📋 View Lesson Syllabus", key="view_syllabus_btn"):
             st.session_state.show_syllabus = not st.session_state.get('show_syllabus', False)
         
         if st.session_state.get('show_syllabus', False):
@@ -4328,7 +4727,7 @@ def show_academic_hub():
         
         # 2. Video Hub Instructions Button [cite: 2025-12-21]
         st.markdown("---")
-        if st.button("🎥 Video Hub Instructions", key="video_hub_instructions_btn", use_container_width=True):
+        if st.button("🎥 Video Hub Instructions", key="video_hub_instructions_btn"):
             st.session_state.show_video_instructions = not st.session_state.get('show_video_instructions', False)
         
         if st.session_state.get('show_video_instructions', False):
@@ -4542,7 +4941,7 @@ def show_academic_hub():
                             start_prompt="🎤 Start Recording",
                             stop_prompt="🛑 Stop & Transcribe",
                             key="academic_final_mic",
-                            use_container_width=True
+                            width='stretch'
                         )
                         
                         if audio is not None:
@@ -4582,14 +4981,42 @@ def show_academic_hub():
                                 session_id=st.session_state.get('academic_session_id', '')
                             )
                             
-                            # Update mastery scores in database based on grading result [cite: 2025-12-21]
+                            # Unified Session Package: Use finalize_session_grading() [cite: 2025-12-21]
                             if isinstance(grading_result, dict):
-                                update_mastery_scores_from_grading(candidate_id, "Academic", grading_result)
-                                st.success("✅ Mastery updated for Academic Hub")
-                            
-                            st.success("✅ Assessment Complete!")
-                            if isinstance(grading_result, dict):
-                                st.metric("Overall Grade", f"{grading_result.get('grade', 'N/A')}/10")
+                                session_package = finalize_session_grading(
+                                    candidate_id=candidate_id,
+                                    track="Academic",
+                                    grading_result=grading_result,
+                                    lesson_name=lesson_name,
+                                    session_id=st.session_state.get('academic_session_id', '')
+                                )
+                                
+                                # Fix the 'Session Metrics' Display: Use helper function [cite: 2025-12-21]
+                                display_package = get_session_metrics("Academic", candidate_id, session_package)
+                                
+                                st.success("✅ Assessment Complete!")
+                                st.markdown("### 📊 Performance Metrics")
+                                
+                                col1, col2, col3, col4 = st.columns(4)
+                                with col1:
+                                    # Sync the Hub Metrics: Display as SCORE% (e.g., 70.0%) [cite: 2025-12-21]
+                                    st.metric("Overall Grade", f"{display_package.get('grade', 0.0):.1f}%", help="Main assessment score")
+                                with col2:
+                                    st.metric("Vocabulary", f"{display_package.get('vocabulary', 0.0):.1f}%", help="Vocabulary mastery")
+                                with col3:
+                                    st.metric("Tone/Honorifics", f"{display_package.get('tone', 0.0):.1f}%", help="Politeness and formality")
+                                with col4:
+                                    st.metric("Contextual Logic", f"{display_package.get('logic', 0.0):.1f}%", help="Understanding and context")
+                                
+                                # Display feedback
+                                with st.expander("📝 Detailed Feedback", expanded=False):
+                                    st.markdown(f"**Accuracy:** {session_package['accuracy_feedback']}")
+                                    st.markdown(f"**Grammar:** {session_package['grammar_feedback']}")
+                                    if session_package.get('sensei_critique'):
+                                        st.markdown(f"**Sensei's Critique:** {session_package['sensei_critique']}")
+                                
+                                # Finalize the Session Package: Force Progress Page update immediately [cite: 2025-12-21]
+                                st.rerun()
                         except Exception as e:
                             st.error(f"Error during grading: {str(e)}")
         
@@ -4640,6 +5067,45 @@ def show_food_tech_hub():
         st.info("Using placeholder candidate ID: CANDIDATE_001")
     
     candidate_id = st.session_state.selected_candidate_id
+    
+    # Force UI Update on Hub Load: Pull from atomic save location immediately [cite: 2025-12-21]
+    if 'food_tech_last_grading_result' not in st.session_state or not st.session_state.get('food_tech_last_grading_result'):
+        try:
+            from database.db_manager import CurriculumProgress, SessionLocal
+            import json
+            db = SessionLocal()
+            try:
+                curriculum = db.query(CurriculumProgress).filter(
+                    CurriculumProgress.candidate_id == candidate_id
+                ).first()
+                if curriculum and curriculum.dialogue_history:
+                    dialogue_history = curriculum.dialogue_history
+                    if isinstance(dialogue_history, str):
+                        dialogue_history = json.loads(dialogue_history)
+                    
+                    for entry in reversed(dialogue_history):
+                        if entry.get("category") == "Food/Tech":
+                            scores = entry.get("scores", {})
+                            st.session_state['food_tech_last_grading_result'] = {
+                                "grade": scores.get("grade", 50.0),
+                                "vocabulary": scores.get("pillar_scores", {}).get("Vocabulary", scores.get("grade", 50.0)),
+                                "tone": scores.get("pillar_scores", {}).get("Tone/Honorifics", scores.get("grade", 50.0)),
+                                "logic": scores.get("pillar_scores", {}).get("Contextual Logic", scores.get("grade", 50.0)),
+                                "category": "Food/Tech"
+                            }
+                            break
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[UI_UPDATE_ERROR] Failed to load from PostgreSQL: {e}")
+    
+    # Clear Session State on Track Switch [cite: 2025-12-21]
+    if 'current_track' not in st.session_state:
+        st.session_state.current_track = "Food/Tech"
+    elif st.session_state.current_track != "Food/Tech":
+        if 'messages' in st.session_state:
+            del st.session_state.messages
+        st.session_state.current_track = "Food/Tech"
     
     # Initialize session if needed
     if 'food_tech_session_id' not in st.session_state:
@@ -4724,7 +5190,7 @@ def show_food_tech_hub():
         # Start Socratic Discussion button - prominently displayed after transcript [cite: 2025-12-21]
         st.markdown("---")
         if len(st.session_state.get('food_tech_chat_history', [])) == 0:
-            if st.button("💬 Start Socratic Discussion", key="start_food_tech_discussion_main", type="primary", use_container_width=True):
+            if st.button("💬 Start Socratic Discussion", key="start_food_tech_discussion_main", type="primary"):
                 # Initialize chat history if needed
                 if 'food_tech_chat_history' not in st.session_state:
                     st.session_state.food_tech_chat_history = []
@@ -4801,7 +5267,7 @@ def show_food_tech_hub():
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    if st.button("➡️ Next Question", key="next_question_food_tech_main", use_container_width=True):
+                    if st.button("➡️ Next Question", key="next_question_food_tech_main"):
                         # Generate follow-up question based on conversation history and transcript [cite: 2025-12-20, 2025-12-21]
                         next_question_prompt = f"""Based on the conversation history below, generate a follow-up Socratic question that:
 1. Builds on the student's previous responses
@@ -4834,7 +5300,7 @@ def show_food_tech_hub():
                             st.rerun()
                 
                 with col2:
-                    if st.button("⏹️ Stop Session", key="stop_session_food_tech_main", use_container_width=True):
+                    if st.button("⏹️ Stop Session", key="stop_session_food_tech_main"):
                         # Mark session as stopped to allow jumping to Final Competency Submission [cite: 2025-12-21]
                         st.session_state.food_tech_session_stopped = True
                         st.rerun()
@@ -4878,7 +5344,7 @@ def show_food_tech_hub():
                             start_prompt="🎤 Start Recording",
                             stop_prompt="🛑 Stop & Transcribe",
                             key="food_tech_final_mic",
-                            use_container_width=True
+                            width='stretch'
                         )
                         
                         if audio is not None:
@@ -4918,16 +5384,47 @@ def show_food_tech_hub():
                                 session_id=session_id
                             )
                             
-                            # Update mastery scores in database based on grading result [cite: 2025-12-21]
+                            # Unified Session Package: Use finalize_session_grading() [cite: 2025-12-21]
                             if isinstance(grading_result, dict):
-                                update_mastery_scores_from_grading(candidate_id, "Food/Tech", grading_result)
-                                st.success("✅ Mastery updated for Food/Tech Hub")
+                                session_package = finalize_session_grading(
+                                    candidate_id=candidate_id,
+                                    track="Food/Tech",
+                                    grading_result=grading_result,
+                                    lesson_name=lesson_name,
+                                    session_id=session_id
+                                )
+                                
                                 question_word_count = grading_result.get('question_word_count', 0)
                                 st.session_state.food_tech_session_total_words = st.session_state.get('food_tech_session_total_words', 0) + question_word_count
-                            
-                            st.success("✅ Assessment Complete!")
-                            if isinstance(grading_result, dict):
-                                st.metric("Overall Grade", f"{grading_result.get('grade', 'N/A')}/10")
+                                
+                                # Display Performance Metrics (UI Alignment) [cite: 2025-12-21]
+                                # Ensure UI Visibility: Check last_grading_result from session state [cite: 2025-12-21]
+                                last_result = st.session_state.get('last_grading_result', session_package)
+                                display_package = last_result if last_result else session_package
+                                
+                                st.success("✅ Assessment Complete!")
+                                st.markdown("### 📊 Performance Metrics")
+                                
+                                col1, col2, col3, col4 = st.columns(4)
+                                with col1:
+                                    # Sync the Hub Metrics: Display as SCORE% (e.g., 70.0%) [cite: 2025-12-21]
+                                    st.metric("Overall Grade", f"{display_package.get('grade', 0.0):.1f}%", help="Main assessment score")
+                                with col2:
+                                    st.metric("Vocabulary", f"{display_package.get('vocabulary', 0.0):.1f}%", help="Vocabulary mastery")
+                                with col3:
+                                    st.metric("Tone/Honorifics", f"{display_package.get('tone', 0.0):.1f}%", help="Politeness and formality")
+                                with col4:
+                                    st.metric("Contextual Logic", f"{display_package.get('logic', 0.0):.1f}%", help="Understanding and context")
+                                
+                                # Display feedback
+                                with st.expander("📝 Detailed Feedback", expanded=False):
+                                    st.markdown(f"**Accuracy:** {session_package['accuracy_feedback']}")
+                                    st.markdown(f"**Grammar:** {session_package['grammar_feedback']}")
+                                    if session_package.get('sensei_critique'):
+                                        st.markdown(f"**Sensei's Critique:** {session_package['sensei_critique']}")
+                                
+                                # Finalize the Session Package: Force Progress Page update immediately [cite: 2025-12-21]
+                                st.rerun()
                         except Exception as e:
                             st.error(f"Error during grading: {str(e)}")
 
@@ -4946,6 +5443,45 @@ def show_caregiving_hub():
         st.info("Using placeholder candidate ID: CANDIDATE_001")
     
     candidate_id = st.session_state.selected_candidate_id
+    
+    # Force UI Update on Hub Load: Pull from atomic save location immediately [cite: 2025-12-21]
+    if 'caregiving_last_grading_result' not in st.session_state or not st.session_state.get('caregiving_last_grading_result'):
+        try:
+            from database.db_manager import CurriculumProgress, SessionLocal
+            import json
+            db = SessionLocal()
+            try:
+                curriculum = db.query(CurriculumProgress).filter(
+                    CurriculumProgress.candidate_id == candidate_id
+                ).first()
+                if curriculum and curriculum.dialogue_history:
+                    dialogue_history = curriculum.dialogue_history
+                    if isinstance(dialogue_history, str):
+                        dialogue_history = json.loads(dialogue_history)
+                    
+                    for entry in reversed(dialogue_history):
+                        if entry.get("category") == "Care-giving":
+                            scores = entry.get("scores", {})
+                            st.session_state['caregiving_last_grading_result'] = {
+                                "grade": scores.get("grade", 50.0),
+                                "vocabulary": scores.get("pillar_scores", {}).get("Vocabulary", scores.get("grade", 50.0)),
+                                "tone": scores.get("pillar_scores", {}).get("Tone/Honorifics", scores.get("grade", 50.0)),
+                                "logic": scores.get("pillar_scores", {}).get("Contextual Logic", scores.get("grade", 50.0)),
+                                "category": "Care-giving"
+                            }
+                            break
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[UI_UPDATE_ERROR] Failed to load from PostgreSQL: {e}")
+    
+    # Clear Session State on Track Switch [cite: 2025-12-21]
+    if 'current_track' not in st.session_state:
+        st.session_state.current_track = "Care-giving"
+    elif st.session_state.current_track != "Care-giving":
+        if 'messages' in st.session_state:
+            del st.session_state.messages
+        st.session_state.current_track = "Care-giving"
     
     # Initialize session if needed
     if 'caregiving_session_id' not in st.session_state:
@@ -5045,7 +5581,7 @@ def show_caregiving_hub():
         # Start Socratic Discussion button - prominently displayed after transcript [cite: 2025-12-21]
         st.markdown("---")
         if len(st.session_state.get('caregiving_chat_history', [])) == 0:
-            if st.button("💬 Start Socratic Discussion", key="start_caregiving_discussion", type="primary", use_container_width=True):
+            if st.button("💬 Start Socratic Discussion", key="start_caregiving_discussion", type="primary"):
                 # Initialize chat history if needed
                 if 'caregiving_chat_history' not in st.session_state:
                     st.session_state.caregiving_chat_history = []
@@ -5122,7 +5658,7 @@ def show_caregiving_hub():
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    if st.button("➡️ Next Question", key="next_question_caregiving_main", use_container_width=True):
+                    if st.button("➡️ Next Question", key="next_question_caregiving_main"):
                         # Generate follow-up question based on conversation history and transcript [cite: 2025-12-20, 2025-12-21]
                         next_question_prompt = f"""Based on the conversation history below, generate a follow-up Socratic question that:
 1. Builds on the student's previous responses
@@ -5155,7 +5691,7 @@ def show_caregiving_hub():
                             st.rerun()
                 
                 with col2:
-                    if st.button("⏹️ Stop Session", key="stop_session_caregiving_main", use_container_width=True):
+                    if st.button("⏹️ Stop Session", key="stop_session_caregiving_main"):
                         # Mark session as stopped to allow jumping to Final Competency Submission [cite: 2025-12-21]
                         st.session_state.caregiving_session_stopped = True
                         st.rerun()
@@ -5199,7 +5735,7 @@ def show_caregiving_hub():
                             start_prompt="🎤 Start Recording",
                             stop_prompt="🛑 Stop & Transcribe",
                             key="caregiving_final_mic",
-                            use_container_width=True
+                            width='stretch'
                         )
                         
                         if audio is not None:
@@ -5239,16 +5775,47 @@ def show_caregiving_hub():
                                 session_id=session_id
                             )
                             
-                            # Update mastery scores in database based on grading result [cite: 2025-12-21]
+                            # Unified Session Package: Use finalize_session_grading() [cite: 2025-12-21]
                             if isinstance(grading_result, dict):
-                                update_mastery_scores_from_grading(candidate_id, "Care-giving", grading_result)
-                                st.success("✅ Mastery updated for Care-giving Hub")
+                                session_package = finalize_session_grading(
+                                    candidate_id=candidate_id,
+                                    track="Care-giving",
+                                    grading_result=grading_result,
+                                    lesson_name=lesson_name,
+                                    session_id=session_id
+                                )
+                                
                                 question_word_count = grading_result.get('question_word_count', 0)
                                 st.session_state.caregiving_session_total_words = st.session_state.get('caregiving_session_total_words', 0) + question_word_count
-                            
-                            st.success("✅ Assessment Complete!")
-                            if isinstance(grading_result, dict):
-                                st.metric("Overall Grade", f"{grading_result.get('grade', 'N/A')}/10")
+                                
+                                # Display Performance Metrics (UI Alignment) [cite: 2025-12-21]
+                                # Ensure UI Visibility: Check last_grading_result from session state [cite: 2025-12-21]
+                                last_result = st.session_state.get('last_grading_result', session_package)
+                                display_package = last_result if last_result else session_package
+                                
+                                st.success("✅ Assessment Complete!")
+                                st.markdown("### 📊 Performance Metrics")
+                                
+                                col1, col2, col3, col4 = st.columns(4)
+                                with col1:
+                                    # Sync the Hub Metrics: Display as SCORE% (e.g., 70.0%) [cite: 2025-12-21]
+                                    st.metric("Overall Grade", f"{display_package.get('grade', 0.0):.1f}%", help="Main assessment score")
+                                with col2:
+                                    st.metric("Vocabulary", f"{display_package.get('vocabulary', 0.0):.1f}%", help="Vocabulary mastery")
+                                with col3:
+                                    st.metric("Tone/Honorifics", f"{display_package.get('tone', 0.0):.1f}%", help="Politeness and formality")
+                                with col4:
+                                    st.metric("Contextual Logic", f"{display_package.get('logic', 0.0):.1f}%", help="Understanding and context")
+                                
+                                # Display feedback
+                                with st.expander("📝 Detailed Feedback", expanded=False):
+                                    st.markdown(f"**Accuracy:** {session_package['accuracy_feedback']}")
+                                    st.markdown(f"**Grammar:** {session_package['grammar_feedback']}")
+                                    if session_package.get('sensei_critique'):
+                                        st.markdown(f"**Sensei's Critique:** {session_package['sensei_critique']}")
+                                
+                                # Finalize the Session Package: Force Progress Page update immediately [cite: 2025-12-21]
+                                st.rerun()
                         except Exception as e:
                             st.error(f"Error during grading: {str(e)}")
                     else:

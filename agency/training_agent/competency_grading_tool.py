@@ -185,18 +185,62 @@ These guidelines form the foundation of commercial kitchen safety and should be 
                 contents=prompt
             )
             
-            # Grade Extraction: Helper function to extract grade from Sensei response [cite: 2025-12-21]
-            def extract_grade_from_text(text: str) -> Optional[float]:
-                """Extract grade from text, handling formats like 'Score: 8/10' or '8/10'."""
+            # Grade Extraction: Helper function with Tri-Pillar Distribution logic [cite: 2025-12-21]
+            def extract_grade_from_text(text: str) -> tuple[Optional[float], dict]:
+                """
+                Extract grade from text with Tri-Pillar Distribution.
+                Returns: (main_grade, pillar_scores_dict)
+                If sub-scores aren't found, distributes main grade across all three pillars.
+                """
                 extracted_grade = None
+                pillar_scores = {
+                    "Vocabulary": None,
+                    "Tone/Honorifics": None,
+                    "Contextual Logic": None
+                }
                 
                 # First try to parse as JSON
                 try:
                     parsed = json.loads(text)
-                    if isinstance(parsed, dict) and "grade" in parsed:
-                        grade_val = parsed["grade"]
-                        if isinstance(grade_val, (int, float)) and 0 < grade_val <= 10:
-                            extracted_grade = float(grade_val)
+                    if isinstance(parsed, dict):
+                        # Extract main grade
+                        if "grade" in parsed:
+                            grade_val = parsed["grade"]
+                            if isinstance(grade_val, (int, float)) and 0 < grade_val <= 10:
+                                extracted_grade = float(grade_val)
+                        
+                        # Extract pillar scores if available (case-insensitive search)
+                        text_lower = text.lower()
+                        for pillar in ["Vocabulary", "Tone/Honorifics", "Contextual Logic"]:
+                            # Try various key formats
+                            pillar_lower = pillar.lower()
+                            # Look for keys like "vocabulary", "vocab", "tone/honorifics", "tone", "contextual logic", "logic"
+                            if pillar == "Vocabulary":
+                                keys = ["vocabulary", "vocab"]
+                            elif pillar == "Tone/Honorifics":
+                                keys = ["tone/honorifics", "tone", "honorifics"]
+                            else:  # Contextual Logic
+                                keys = ["contextual logic", "logic", "context"]
+                            
+                            for key in keys:
+                                # Try direct key match in JSON
+                                if key in parsed:
+                                    val = parsed[key]
+                                    if isinstance(val, (int, float)) and 0 <= val <= 10:
+                                        pillar_scores[pillar] = float(val)
+                                        break
+                                
+                                # Try case-insensitive search in text
+                                pattern = rf'"{key}"\s*:\s*(\d+(?:\.\d+)?)'
+                                match = re.search(pattern, text_lower)
+                                if match:
+                                    try:
+                                        val = float(match.group(1))
+                                        if 0 <= val <= 10:
+                                            pillar_scores[pillar] = val
+                                            break
+                                    except:
+                                        pass
                 except:
                     pass
                 
@@ -224,48 +268,113 @@ These guidelines form the foundation of commercial kitchen safety and should be 
                                     try:
                                         grade_val = float(group)
                                         if 0 < grade_val <= 10:
-                                            extracted_grade = grade_val
+                                            extracted_grade = float(grade_val)
                                             break
                                     except:
                                         continue
                             if extracted_grade is not None:
                                 break
                 
-                # The Registry Fix: Print [DATA_SYNC] message when grade is extracted [cite: 2025-12-21]
+                # Tri-Pillar Distribution: If sub-scores aren't found, distribute main grade across all three pillars
                 if extracted_grade is not None:
-                    print(f"[DATA_SYNC] Track: {track} | Score: {extracted_grade}/10")
+                    # Check if any pillar score is missing
+                    missing_pillars = [p for p, score in pillar_scores.items() if score is None]
+                    
+                    if missing_pillars:
+                        # Distribute the main grade across all three pillars
+                        distributed_score = extracted_grade
+                        for pillar in pillar_scores:
+                            if pillar_scores[pillar] is None:
+                                pillar_scores[pillar] = distributed_score
+                    
+                    # Key Standardization: Force Hard-Mapping to exact keys [cite: 2025-12-21]
+                    # Ensure output dictionary keys are EXACTLY: ['Vocabulary', 'Tone/Honorifics', 'Contextual Logic']
+                    # No abbreviations like 'Vocab' or 'Logic'
+                    standardized_pillar_scores = {
+                        "Vocabulary": float(pillar_scores.get("Vocabulary", extracted_grade)),
+                        "Tone/Honorifics": float(pillar_scores.get("Tone/Honorifics", extracted_grade)),
+                        "Contextual Logic": float(pillar_scores.get("Contextual Logic", extracted_grade))
+                    }
+                    pillar_scores = standardized_pillar_scores
+                    
+                    # STRICT ARCHITECTURAL OVERHAUL: Standardize the Percentage (Scale 100) [cite: 2025-12-21]
+                    # Force extract_grade_from_text to return ONLY values between 0-100
+                    # If the AI says 2/10, the tool MUST return 20.0. Not 2.0.
+                    # Logic: final_score = float(extracted_value) * 10.0 if the base was 10
+                    
+                    # Ensure extracted_grade is in 0-10 range, then convert to 0-100
+                    if extracted_grade <= 10:
+                        extracted_grade_percent = float(extracted_grade) * 10.0
+                    else:
+                        # If already > 10, assume it's already in percentage format, but clamp to 0-100
+                        extracted_grade_percent = max(0.0, min(100.0, float(extracted_grade)))
+                    
+                    # Convert pillar scores to 0-100 range
+                    pillar_scores_percent = {}
+                    for skill, score in pillar_scores.items():
+                        if score <= 10:
+                            pillar_scores_percent[skill] = float(score) * 10.0
+                        else:
+                            # If already > 10, assume it's already in percentage format, but clamp to 0-100
+                            pillar_scores_percent[skill] = max(0.0, min(100.0, float(score)))
+                    
+                    # Ensure all values are in 0-100 range (final safety check)
+                    extracted_grade_percent = max(0.0, min(100.0, extracted_grade_percent))
+                    for skill in pillar_scores_percent:
+                        pillar_scores_percent[skill] = max(0.0, min(100.0, pillar_scores_percent[skill]))
+                    
+                    # The Registry Fix: Print [DATA_SYNC] message when grade is extracted [cite: 2025-12-21]
+                    print(f"[DATA_SYNC] Track: {track} | Score: {extracted_grade_percent:.1f}% (was {extracted_grade}/10) | Pillars: Vocab={pillar_scores_percent['Vocabulary']:.1f}%, Tone={pillar_scores_percent['Tone/Honorifics']:.1f}%, Logic={pillar_scores_percent['Contextual Logic']:.1f}%")
+                    print(f"[DATA_SYNC] Standardized keys: {list(pillar_scores_percent.keys())}")
+                    print(f"[DATA_SYNC] VERIFIED: All scores in 0-100 range - Main: {extracted_grade_percent:.1f}%, Vocab: {pillar_scores_percent['Vocabulary']:.1f}%, Tone: {pillar_scores_percent['Tone/Honorifics']:.1f}%, Logic: {pillar_scores_percent['Contextual Logic']:.1f}%")
                 
-                return extracted_grade
+                    return extracted_grade_percent, pillar_scores_percent
+                
+                # If no grade extracted, return None and empty dict (not 0-100 values)
+                return None, {}
             
             # Try to parse as JSON, if it fails, extract JSON from text
             try:
                 grading_result = json.loads(response_obj.text)
-                # Validate grade using extraction helper
-                extracted_grade = extract_grade_from_text(response_obj.text)
+                # Validate grade using extraction helper with Tri-Pillar Distribution
+                extracted_grade, pillar_scores = extract_grade_from_text(response_obj.text)
                 if extracted_grade is not None:
                     grading_result["grade"] = extracted_grade
+                    # Add pillar scores to grading_result for database sync
+                    grading_result["pillar_scores"] = pillar_scores
             except json.JSONDecodeError:
                 # If response is not pure JSON, try to extract JSON from markdown or text
                 json_match = re.search(r'\{[^{}]*"grade"[^{}]*\}', response_obj.text, re.DOTALL)
                 if json_match:
                     try:
                         grading_result = json.loads(json_match.group())
-                        # Validate grade using extraction helper
-                        extracted_grade = extract_grade_from_text(response_obj.text)
+                        # Validate grade using extraction helper with Tri-Pillar Distribution
+                        extracted_grade, pillar_scores = extract_grade_from_text(response_obj.text)
                         if extracted_grade is not None:
                             grading_result["grade"] = extracted_grade
+                            grading_result["pillar_scores"] = pillar_scores
                     except:
-                        # Fallback: use grade extraction
-                        extracted_grade = extract_grade_from_text(response_obj.text)
+                        # Fallback: use grade extraction with Tri-Pillar Distribution
+                        extracted_grade, pillar_scores = extract_grade_from_text(response_obj.text)
                         if extracted_grade is not None:
-                            grading_result = {"grade": extracted_grade, "accuracy_feedback": response_obj.text[:200], "grammar_feedback": "Extracted grade from text"}
+                            grading_result = {
+                                "grade": extracted_grade,
+                                "pillar_scores": pillar_scores,
+                                "accuracy_feedback": response_obj.text[:200],
+                                "grammar_feedback": "Extracted grade from text"
+                            }
                         else:
                             grading_result = {"grade": 5, "accuracy_feedback": response_obj.text[:200], "grammar_feedback": "Could not parse JSON response"}
                 else:
-                    # Fallback: use grade extraction
-                    extracted_grade = extract_grade_from_text(response_obj.text)
+                    # Fallback: use grade extraction with Tri-Pillar Distribution
+                    extracted_grade, pillar_scores = extract_grade_from_text(response_obj.text)
                     if extracted_grade is not None:
-                        grading_result = {"grade": extracted_grade, "accuracy_feedback": response_obj.text[:200], "grammar_feedback": "Extracted grade from text"}
+                        grading_result = {
+                            "grade": extracted_grade,
+                            "pillar_scores": pillar_scores,
+                            "accuracy_feedback": response_obj.text[:200],
+                            "grammar_feedback": "Extracted grade from text"
+                        }
                     else:
                         grading_result = {"grade": 5, "accuracy_feedback": response_obj.text[:200], "grammar_feedback": "Could not parse JSON response"}
             
@@ -275,11 +384,20 @@ These guidelines form the foundation of commercial kitchen safety and should be 
             # Grade Extraction: Convert grade to float if needed [cite: 2025-12-21]
             raw_grade = grading_result.get("grade", 5)
             if isinstance(raw_grade, str):
-                # Try to extract from string
-                extracted = extract_grade_from_text(str(raw_grade))
+                # Try to extract from string with Tri-Pillar Distribution
+                extracted, pillar_scores = extract_grade_from_text(str(raw_grade))
                 grade_value = extracted if extracted is not None else 5
+                if extracted is not None:
+                    grading_result["pillar_scores"] = pillar_scores
             else:
                 grade_value = float(raw_grade) if isinstance(raw_grade, (int, float)) else 5
+                # If pillar_scores not set, create default distribution
+                if "pillar_scores" not in grading_result:
+                    grading_result["pillar_scores"] = {
+                        "Vocabulary": grade_value,
+                        "Tone/Honorifics": grade_value,
+                        "Contextual Logic": grade_value
+                    }
             
             result = {
                 "grade": int(grade_value),
@@ -290,7 +408,12 @@ These guidelines form the foundation of commercial kitchen safety and should be 
                 "question_duration": question_duration,  # Granular Tracking [cite: 2025-12-21]
                 "sensei_critique": grading_result.get("sensei_critique", "No critique provided."),  # Granular Tracking [cite: 2025-12-21]
                 "weakness_area": grading_result.get("weakness_area", "Other"),  # Sensei Logic [cite: 2025-12-20, 2025-12-21]
-                "session_id": session_id  # Session Persistence [cite: 2025-12-21]
+                "session_id": session_id,  # Session Persistence [cite: 2025-12-21]
+                "pillar_scores": grading_result.get("pillar_scores", {  # Tri-Pillar Distribution [cite: 2025-12-21]
+                    "Vocabulary": grade_value,
+                    "Tone/Honorifics": grade_value,
+                    "Contextual Logic": grade_value
+                })
             }
             
             # Ensure grade is between 1-10
