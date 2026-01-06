@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Xplora Kodo: Japan and Beyond - Streamlit Dashboard
+Xplora Kodo: The Gateway to Japan and Beyond - Streamlit Dashboard
 
 Provides:
 - Candidate View: Searchable list with Travel-Ready status and JLPT progress
@@ -67,7 +67,7 @@ except ImportError:
 
 # Page configuration
 st.set_page_config(
-    page_title="Xplora Kodo: Japan and Beyond",
+    page_title="Xplora Kodo: The Gateway to Japan and Beyond",
     page_icon="🌏",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -2341,7 +2341,7 @@ def main():
     except Exception:
         pass  # Cache clearing is optional, don't fail if it's not available
     
-    st.markdown('<h1 class="main-header">🌏 Xplora Kodo: Japan and Beyond</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">🌏 Xplora Kodo: The Gateway to Japan and Beyond</h1>', unsafe_allow_html=True)
 
     # Sidebar navigation
     st.sidebar.title("Navigation")
@@ -3434,9 +3434,51 @@ def show_progress_dashboard():
                     # Load lesson_history from user_progress.json
                     _, lesson_history_for_report, _ = load_mastery_stats()
                     
+                    # Force Synchronous Mapping: Use exact same logic as dashboard to ensure UI-PDF sync
+                    # Explain the Logic: The 20.0% in DEBUG: Using DB mastery_scores comes from:
+                    # 1. calculate_mastery_scores() gets DB data (may be 0.0)
+                    # 2. Dashboard then MERGES with track_mastery_json from user_progress.json (has 20.0%)
+                    # 3. JSON takes precedence if higher or if DB is 0
+                    # Locate the Disconnect: PDF button was only using DB, not merging with JSON like dashboard
+                    
+                    # Step 1: Get DB data (same as dashboard line 2898)
+                    current_mastery, _ = calculate_mastery_scores(candidate_id)
+                    
+                    # Step 2: Load track_mastery_json (same as dashboard line 2829)
+                    _, _, track_mastery_json = load_mastery_stats()
+                    
+                    # Step 3: Merge with JSON (same as dashboard lines 2900-2916)
+                    skill_mapping = {
+                        "vocab": "Vocabulary",
+                        "tone": "Tone/Honorifics",
+                        "logic": "Contextual Logic"
+                    }
+                    
+                    # Update mastery_scores with track_mastery from JSON (JSON takes precedence if available)
+                    for track in ["Academic", "Food/Tech", "Care-giving"]:
+                        if track in track_mastery_json:
+                            track_data = track_mastery_json[track]
+                            for json_key, db_skill in skill_mapping.items():
+                                json_value = track_data.get(json_key, 0)
+                                # Use JSON value if it's higher than database value, or if database value is 0
+                                if json_value > 0 and (current_mastery[track].get(db_skill, 0) == 0 or json_value > current_mastery[track].get(db_skill, 0)):
+                                    current_mastery[track][db_skill] = float(json_value)
+                    
+                    # Fix Injection Variable: Verify calculate_mastery_scores succeeded before passing
+                    if not current_mastery:
+                        st.error("❌ Failed to retrieve mastery scores from database. Cannot generate PDF.")
+                        st.stop()
+                    
+                    # Verify: Ensure dictionary structure matches exactly: {'Care-giving': {'Vocabulary': 20.0, ...}, ...}
+                    st.write(f"PROMPT DEBUG: Sending these scores to tool: {current_mastery}")
+                    
                     # Fix PDF Sub-process Error: Initialize ReportGenerator inside function call, not at module level [cite: 2025-12-21]
                     # This prevents "pickling" errors during Uvicorn reload
-                    report_tool = GeneratePerformanceReport(candidate_id=candidate_id)
+                    # Inject: Pass current_mastery directly into mastery_scores_override (now with merged DB+JSON data)
+                    report_tool = GeneratePerformanceReport(
+                        candidate_id=candidate_id,
+                        mastery_scores_override=current_mastery
+                    )
                     # Store lesson_history in session state for report_generator to access
                     st.session_state.lesson_history = lesson_history_for_report
                     result = report_tool.run()
