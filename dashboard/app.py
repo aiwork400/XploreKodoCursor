@@ -508,18 +508,34 @@ def show_concierge_widget():
         
         st.markdown("---")
         
-        # Display conversation history
-        if st.session_state.concierge_messages:
-            st.markdown("**💬 Conversation History:**")
-            for msg in st.session_state.concierge_messages[-5:]:
-                if msg["role"] == "user":
-                    with st.expander(f"**You:** {msg['content'][:60]}...", expanded=False):
-                        st.markdown(msg['content'])
-                else:
-                    with st.expander(f"**🤖 Concierge:** {msg['content'][:60]}...", expanded=True):
-                        st.markdown(msg['content'])
+        # Rendering Order: Process user input FIRST before displaying messages [cite: 2025-12-21]
+        # This ensures new messages are appended to st.session_state.messages before the display loop runs
         
-        st.markdown("---")
+        # Initialize global messages if not exists
+        if 'messages' not in st.session_state:
+            st.session_state.messages = []
+        
+        # Greeting Suppression: Initialize flag to prevent multiple initial greetings [cite: 2025-12-21]
+        if 'concierge_initial_greeting_sent' not in st.session_state:
+            st.session_state.concierge_initial_greeting_sent = False
+        
+        # Greeting Suppression: Add initial greeting only once when session starts [cite: 2025-12-21]
+        # This must happen BEFORE processing user input to ensure greeting appears at the top
+        if not st.session_state.concierge_initial_greeting_sent and len(st.session_state.messages) == 0:
+            # Add welcome greeting only if no messages exist
+            greeting_text = {
+                "en": "Hello! 👋 I'm the Xplora Kodo Concierge. How can I help you today?",
+                "ja": "こんにちは！👋 Xplora Kodoコンシェルジュです。今日はどのようにお手伝いできますか？",
+                "ne": "नमस्ते! 👋 म Xplora Kodo Concierge हुँ। आज म तपाईंलाई कसरी मद्दत गर्न सक्छु?"
+            }
+            greeting = greeting_text.get(st.session_state.concierge_language, greeting_text["en"])
+            greeting_msg = {
+                "role": "assistant",
+                "content": greeting
+            }
+            st.session_state.concierge_messages.append(greeting_msg)
+            st.session_state.messages.append(greeting_msg)
+            st.session_state.concierge_initial_greeting_sent = True
         
         # Hybrid Input: Chat + Mic Recorder - ALWAYS VISIBLE
         st.markdown("**💬 Ask the Concierge:**")
@@ -652,38 +668,35 @@ def show_concierge_widget():
             user_input = st.session_state.pending_user_input
             del st.session_state.pending_user_input
         
-        # Process user input
+        # Rendering Order: Process user input FIRST, append to messages BEFORE display loop [cite: 2025-12-21]
+        # This ensures new messages are in st.session_state.messages when the display loop runs
         if user_input and user_input.strip():
-            # Add user message
-            st.session_state.concierge_messages.append({
+            # Persistent Chat History: Append user message to both concierge-specific and global messages [cite: 2025-12-21]
+            user_msg = {
                 "role": "user",
                 "content": user_input
-            })
+            }
+            st.session_state.concierge_messages.append(user_msg)
+            st.session_state.messages.append(user_msg)
             
             # Get response from SupportAgent with loading indicator
             # STATE LOGIC: Set avatar to talking while generating response
             st.session_state.concierge_avatar_talking = True
-            st.info("🤖 Thinking...")
             try:
                 response = get_concierge_response(user_input.strip(), st.session_state.concierge_language)
                 
-                # Add assistant message
-                st.session_state.concierge_messages.append({
+                # Rendering Order: Append assistant response BEFORE display loop [cite: 2025-12-21]
+                # This ensures the response appears immediately in the chat display loop below
+                assistant_msg = {
                     "role": "assistant",
                     "content": response
-                })
-                
-                # Display response prominently (will be shown in conversation history after rerun)
-                st.success("✅ Response generated!")
-                st.markdown("---")
-                st.markdown("**🤖 Concierge Response:**")
-                st.markdown(response)
-                st.markdown("---")
+                }
+                st.session_state.concierge_messages.append(assistant_msg)
+                st.session_state.messages.append(assistant_msg)
                 
                 # TEXT-TO-VOICE TRIGGER: Generate TTS audio for both text and voice input
                 # This ensures the avatar talking animation is triggered
                 # AUDIO SYNC: Always generate audio, even in Text mode, to trigger isTalking animation
-                st.info("🔊 Generating audio...")
                 audio_output = generate_trilingual_tts(response, st.session_state.concierge_language)
                 if audio_output:
                     # ROBUST FILE WRITING: Save audio as temp_voice.mp3 using absolute path
@@ -703,17 +716,6 @@ def show_concierge_widget():
                             os.fsync(f.fileno())  # Ensure OS has written to disk
                     except Exception as e:
                         logger.error(f"Failed to write audio file: {e}")
-                        st.error(f"❌ Failed to save audio file: {e}")
-                    
-                    # ROBUST FILE WRITING: Verify file was created
-                    if not temp_audio_path.exists():
-                        logger.error('CRITICAL: Audio file not created!')
-                        st.error("❌ CRITICAL: Audio file not created! TTS may have failed.")
-                    elif temp_audio_path.stat().st_size == 0:
-                        logger.error('CRITICAL: Audio file is 0 bytes!')
-                        st.error("❌ CRITICAL: Audio file is 0 bytes! TTS generation may have failed.")
-                    else:
-                        logger.info(f"Audio file created successfully: {temp_audio_path} ({temp_audio_path.stat().st_size} bytes)")
                     
                     # AUDIO PATH VERIFICATION: Wait for file to be fully written and closed
                     time.sleep(0.5)  # Ensure file is closed before Streamlit tries to play it
@@ -739,83 +741,50 @@ def show_concierge_widget():
                     audio_base64 = base64.b64encode(audio_output).decode('utf-8')
                     audio_data_uri = f"data:audio/mp3;base64,{audio_base64}"
                     
-                    # Display audio player with JavaScript to trigger avatar animation
-                    # Use file path primarily, with base64 fallback
-                    st.markdown(
-                        f"""
-                        <audio id="{audio_id}" controls autoplay style="width: 100%; margin-top: 10px;">
-                            <source src="{audio_url}" type="audio/mp3" onerror="this.onerror=null; this.src='{audio_data_uri}';">
-                            <source src="{audio_data_uri}" type="audio/mp3">
-                            Your browser does not support the audio element.
-                        </audio>
-                        <script>
-                        (function() {{
-                            const audio = document.getElementById('{audio_id}');
-                            if (audio) {{
-                                // Force autoplay (may require user interaction first)
-                                setTimeout(function() {{
-                                    audio.play().catch(function(error) {{
-                                        console.log('Autoplay prevented:', error);
-                                        // If autoplay fails, show a play button message
-                                        const playMsg = document.createElement('div');
-                                        playMsg.id = 'play_msg_{audio_id}';
-                                        playMsg.innerHTML = '<p style="color: #666; font-size: 12px; margin-top: 5px; text-align: center;">🔊 Click play above to hear the response</p>';
-                                        audio.parentNode.appendChild(playMsg);
-                                    }});
-                                }}, 100);
-                                
-                                // Audio event handlers (state managed by Python - no bridge needed)
-                                audio.addEventListener('play', function() {{
-                                    console.log('Audio playing');
-                                    // Remove play message if it exists
-                                    const playMsg = document.getElementById('play_msg_{audio_id}');
-                                    if (playMsg) playMsg.remove();
-                                }});
-                                
-                                audio.addEventListener('ended', function() {{
-                                    console.log('Audio ended');
-                                }});
-                                
-                                audio.addEventListener('pause', function() {{
-                                    console.log('Audio paused');
-                                }});
-                                
-                                // Handle load error - try fallback
-                                audio.addEventListener('error', function(e) {{
-                                    console.log('Audio load error, trying fallback');
-                                    const sources = audio.querySelectorAll('source');
-                                    if (sources.length > 1 && sources[0].src !== '{audio_data_uri}') {{
-                                        audio.src = '{audio_data_uri}';
-                                        audio.load();
-                                    }}
-                                }});
-                            }} else {{
-                                console.error('Audio element not found:', '{audio_id}');
-                            }}
-                        }})();
-                        </script>
-                        """,
-                        unsafe_allow_html=True
-                    )
                     # Store audio in session state for display below avatar
                     st.session_state.concierge_audio_output = audio_output
-                    
-                    st.success("✅ Audio ready! Avatar will animate while speaking.")
-                else:
-                    st.warning("⚠️ Audio generation unavailable")
                 
             except Exception as e:
                 error_msg = f"Error: {str(e)}"
-                st.error(error_msg)
-                st.session_state.concierge_messages.append({
+                # Persistent Chat History: Add error message to both lists [cite: 2025-12-21]
+                error_msg_obj = {
                     "role": "assistant",
                     "content": error_msg
-                })
+                }
+                st.session_state.concierge_messages.append(error_msg_obj)
+                st.session_state.messages.append(error_msg_obj)
                 import traceback
                 if config.DEBUG:
                     st.code(traceback.format_exc())
-            
-            st.rerun()
+        
+        # UI Refresh: Display all messages from updated st.session_state.messages [cite: 2025-12-21]
+        # This reads directly from session state, not a cached copy, ensuring new messages appear immediately
+        st.markdown("**💬 Conversation:**")
+        
+        # UI Refresh: Read directly from st.session_state.messages (not a local copy) [cite: 2025-12-21]
+        # This ensures the display loop always shows the latest messages including newly added ones
+        for message in st.session_state.messages:
+            if message.get('role') == 'assistant' or message.get('role') == 'concierge':
+                with st.chat_message("assistant"):
+                    st.markdown(message.get('content', ''))
+            elif message.get('role') == 'user':
+                with st.chat_message("user"):
+                    st.write(message.get('content', ''))
+        
+        # Also display concierge-specific messages for backward compatibility (if not already in global messages)
+        if st.session_state.concierge_messages:
+            displayed_content = {msg.get('content', '') for msg in st.session_state.messages}
+            for msg in st.session_state.concierge_messages[-5:]:
+                if msg.get('content', '') not in displayed_content:
+                    if msg["role"] == "user":
+                        with st.chat_message("user"):
+                            st.write(msg['content'])
+                    else:
+                        with st.chat_message("assistant"):
+                            st.markdown(msg['content'])
+        
+        st.markdown("---")
+                
 
 
 def process_concierge_voice(audio_bytes: bytes, language: str) -> str:
@@ -1000,6 +969,18 @@ def get_sensei_response(
         
         client = genai.Client(api_key=config.GEMINI_API_KEY)
         
+        # RAG Integration: Retrieve relevant context from knowledge base
+        rag_context = ""
+        try:
+            from utils.rag_query import get_rag_context
+            rag_context = get_rag_context(user_input, max_chunks=3)
+        except Exception as e:
+            # RAG is optional - if it fails, continue without it
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.debug(f"RAG query failed (non-critical): {e}")
+            rag_context = ""
+        
         # Determine conversation phase based on timer
         if timer_elapsed < 180:
             phase = "helpful_assistant"
@@ -1023,9 +1004,19 @@ def get_sensei_response(
             prompt = user_input  # Use the simplified prompt as-is
         # Handle initial greeting when user_input is empty [cite: 2025-12-20]
         elif not user_input or user_input.strip() == "":
+            # RAG Integration: Get context for initial greeting (shared for all tracks)
+            greeting_rag_context = ""
+            try:
+                from utils.rag_query import get_rag_context
+                greeting_rag_context = get_rag_context("Xplora Kodo platform introduction", max_chunks=2)
+            except Exception:
+                greeting_rag_context = ""
+            
             # Initial greeting for Academic Hub
             if current_page == "📖 Academic Hub" or current_page == "Academic Hub":
                 prompt = f"""You are a Socratic Japanese Language Teacher. Your goal is to guide the student to understand grammar, particles, and kanji.
+
+{greeting_rag_context}
 
 **System Context - Lesson Transcript:**
 {transcript}
@@ -1047,6 +1038,8 @@ Keep it brief (2-3 sentences) and friendly.
             else:
                 # Initial greeting for Food/Tech track
                 prompt = f"""You are a Japanese Food Safety Sensei (Teacher) conducting a Socratic dialogue about HACCP and kitchen sanitization.
+
+{greeting_rag_context}
 
 **System Context - Lesson Transcript:**
 {transcript}
@@ -1071,6 +1064,8 @@ Keep it brief (2-3 sentences) and friendly.
             # Transcript-to-Sensei: Ensure transcript is used as system prompt context [cite: 2025-12-20]
             # Trilingual Protocol: System prompt enforces exact Markdown format [cite: 2025-12-21]
             prompt = f"""You are a Socratic Japanese Language Teacher. Your goal is to guide the student to understand grammar, particles, and kanji. Use the transcript provided. If they make a mistake with a particle (like wa vs ga), ask them to explain the function of the particle instead of correcting them immediately.
+
+{rag_context}
 
 **System Context - Lesson Transcript:**
 {transcript}
@@ -1126,6 +1121,8 @@ User input: {user_input!r}
         elif current_page == "🍜 Food/Tech Hub" or current_page == "Food/Tech Hub" or track == "Food/Tech":
             # Food/Tech Sensei persona (default)
             prompt = f"""You are a Japanese Food Safety Sensei (Teacher) conducting a Socratic dialogue about HACCP (Hazard Analysis and Critical Control Points) and kitchen sanitization.
+
+{rag_context}
 
 **System Context - Lesson Transcript:**
 {transcript}
@@ -1184,6 +1181,8 @@ Every single response you give MUST follow this exact Markdown format. There are
 
 🇳🇵 Nepali: [Translation of the English part into Nepali using Devanagari script]
 
+{rag_context}
+
 **System Context - Lesson Transcript:**
 {transcript}
 
@@ -1232,6 +1231,8 @@ User input: {user_input!r}
         else:
             # Food/Tech Sensei persona (default fallback)
             prompt = f"""You are a Japanese Food Safety Sensei (Teacher) conducting a Socratic dialogue about HACCP (Hazard Analysis and Critical Control Points) and kitchen sanitization.
+
+{rag_context}
 
 **CRITICAL: Trilingual Response Format**
 Every single response you give MUST follow this exact Markdown format. There are NO exceptions:
@@ -1294,15 +1295,32 @@ def render_unified_chat_interface(
     if audio_hash_key not in st.session_state:
         st.session_state[audio_hash_key] = None
     
-    # Display chat history
+    # Persistent Chat History: Display all messages in st.session_state.messages on every rerun [cite: 2025-12-21]
+    # This ensures messages persist and don't disappear when the script reruns
+    if 'messages' not in st.session_state:
+        st.session_state.messages = []
+    
+    # Display all messages from session state
+    for message in st.session_state.messages:
+        if message.get('role') == 'assistant' or message.get('role') == 'sensei':
+            with st.chat_message("assistant"):
+                st.markdown(message.get('content', ''))
+        elif message.get('role') == 'user':
+            with st.chat_message("user"):
+                st.write(message.get('content', ''))
+    
+    # Also display track-specific chat history for backward compatibility
     if chat_history:
+        # Only display messages that aren't already in st.session_state.messages
+        displayed_content = {msg.get('content', '') for msg in st.session_state.messages}
         for message in chat_history:
-            if message['role'] == 'sensei':
-                with st.chat_message("assistant"):
-                    st.markdown(message['content'])
-            elif message['role'] == 'user':
-                with st.chat_message("user"):
-                    st.write(message['content'])
+            if message.get('content', '') not in displayed_content:
+                if message['role'] == 'sensei':
+                    with st.chat_message("assistant"):
+                        st.markdown(message['content'])
+                elif message['role'] == 'user':
+                    with st.chat_message("user"):
+                        st.write(message['content'])
     
     # Start discussion button (only if chat is empty)
     if len(chat_history) == 0:
@@ -1324,10 +1342,16 @@ def render_unified_chat_interface(
                     track=track,
                     current_page=current_page
                 )
+                # Persistent Chat History: Add initial greeting to both track-specific and global messages [cite: 2025-12-21]
+                sensei_msg = {
+                    'role': 'assistant',
+                    'content': initial_greeting
+                }
                 chat_history.append({
                     'role': 'sensei',
                     'content': initial_greeting
                 })
+                st.session_state.messages.append(sensei_msg)
                 st.rerun()
     
     # Input Method Toggle (Text or Audio) - Ported from Academic Hub [cite: 2025-12-21]
@@ -1345,11 +1369,13 @@ def render_unified_chat_interface(
     if input_method == "text":
         user_message = st.chat_input(placeholder_text)
         if user_message:
-            # Add user message to chat history
-            chat_history.append({
+            # Persistent Chat History: Append user message to both track-specific and global messages [cite: 2025-12-21]
+            user_msg = {
                 'role': 'user',
                 'content': user_message
-            })
+            }
+            chat_history.append(user_msg)
+            st.session_state.messages.append(user_msg)
             
             # Get Sensei response using AAI Conversation logic
             sensei_response = get_sensei_response(
@@ -1361,11 +1387,16 @@ def render_unified_chat_interface(
                 current_page=current_page
             )
             
-            # Add Sensei response to chat history
+            # Persistent Chat History: Append assistant response to both track-specific and global messages [cite: 2025-12-21]
+            sensei_msg = {
+                'role': 'assistant',
+                'content': sensei_response
+            }
             chat_history.append({
                 'role': 'sensei',
                 'content': sensei_response
             })
+            st.session_state.messages.append(sensei_msg)
             
             # Update session state
             st.session_state[chat_history_key] = chat_history
@@ -2127,11 +2158,15 @@ def get_concierge_response(user_input: str, language: str) -> str:
             return 'Xplora Kodo is a Trilingual Platform! ✅\n\nThe platform supports **three languages**:\n- 🇺🇸 **English** (en)\n- 🇯🇵 **Japanese** (日本語) (ja)\n- 🇳🇵 **Nepali** (नेपाली) (ne)\n\n**Features available in all languages:**\n- Voice recording and transcription\n- Text-to-speech responses\n- AI-powered language coaching\n- Virtual classroom with Sensei avatar\n- Life-in-Japan support and advice\n\nSwitch languages using the 🌐 Language selector above!'
         
         # Check if user wants to navigate
+        # Prevent Auto-Redirect: Navigation tool returns a message but doesn't auto-redirect [cite: 2025-12-21]
+        # The NavigateToPage tool only returns a message, it doesn't call st.switch_page()
         navigation_keywords = ["go to", "take me to", "show me", "navigate to", "open"]
         if any(keyword in user_lower for keyword in navigation_keywords):
-            # Use navigation tool
+            # Use navigation tool (returns message, doesn't auto-redirect)
             nav_tool = NavigateToPage(page_name=user_input, reason=f"User requested navigation: {user_input}")
-            return nav_tool.run()
+            nav_message = nav_tool.run()
+            # Note: User must manually select the page from sidebar - no automatic redirect
+            return nav_message
         
         # Check if it's a general question about the platform
         platform_keywords = ["what is", "what can", "how does", "how to", "help", "features", "capabilities"]
@@ -2322,6 +2357,10 @@ def generate_trilingual_tts(text: str, language: str, track: str | None = None) 
 # Main App
 def main():
     """Main Streamlit app."""
+    # Persistent Chat History: Initialize messages at the start of the script [cite: 2025-12-21]
+    if 'messages' not in st.session_state:
+        st.session_state.messages = []
+    
     # Fix Duplicate Key: Initialize ALL session state keys at the very top, before any UI calls [cite: 2025-12-21]
     if 'concierge_avatar_visible' not in st.session_state:
         st.session_state.concierge_avatar_visible = True
@@ -2375,14 +2414,32 @@ def main():
     if admin_mode:
         page_options.append("Admin Dashboard")
     
+    # Fix Auto-Redirect: Use current_page_key to determine which page should be selected [cite: 2025-12-21]
+    # Initialize current_page_key if not exists (default to first option)
+    if 'current_page_key' not in st.session_state:
+        st.session_state.current_page_key = page_options[0]
+    
+    # Get current selection index based on current_page_key
+    current_index = 0
+    if st.session_state.current_page_key in page_options:
+        current_index = page_options.index(st.session_state.current_page_key)
+    
     page = st.sidebar.radio(
         "Select View",
         page_options,
+        index=current_index,
+        key="page_selector"
     )
     
-    # Store current page in session state for persona detection
+    # Explicit Defaulting: Update current_page_key when user changes selection [cite: 2025-12-21]
+    # This ensures the selected page persists across reruns and prevents jumping back to Academic Hub
+    if page != st.session_state.current_page_key:
+        st.session_state.current_page_key = page
+    
+    # Store current page in session state for persona detection and compatibility
     st.session_state.page = page
     st.session_state.current_page = page  # Also store as current_page for compatibility
+    st.session_state.saved_page = page  # Keep for backward compatibility
     
     # Reset Today's Session: Date-based session reset for AI Daily Briefing and word counts [cite: 2025-12-21]
     today = datetime.now().date()
@@ -2427,14 +2484,19 @@ def main():
                     st.code(traceback.format_exc())
 
     # Page routing with error handling
+    # Explicit Defaulting: Ensure current_page_key is updated when routing to maintain sticky navigation [cite: 2025-12-21]
     try:
         if page == "Candidate View":
+            st.session_state.current_page_key = "Candidate View"
             show_candidate_view()
         elif page == "Wisdom Hub":
+            st.session_state.current_page_key = "Wisdom Hub"
             show_wisdom_hub()
         elif page == "Video Hub":
+            st.session_state.current_page_key = "Video Hub"
             show_video_hub()
         elif page == "📖 Academic Hub":
+            st.session_state.current_page_key = "📖 Academic Hub"
             # Nuclear Fix: Explicitly wrap Academic Hub call with detailed error logger [cite: 2025-12-21]
             try:
                 show_academic_hub()
@@ -2445,20 +2507,28 @@ def main():
                 st.code(traceback.format_exc(), language='python')
                 st.info("💡 Please check the traceback above to identify the exact line causing the error.")
         elif page == "🍜 Food/Tech Hub":
+            st.session_state.current_page_key = "🍜 Food/Tech Hub"
             show_food_tech_hub()
         elif page == "🏥 Care-giving Hub":
+            st.session_state.current_page_key = "🏥 Care-giving Hub"
             show_caregiving_hub()
         elif page == "Progress":
+            st.session_state.current_page_key = "Progress"
             show_progress_dashboard()
         elif page == "Live Simulator":
+            st.session_state.current_page_key = "Live Simulator"
             show_live_simulator()
         elif page == "Financial Ledger":
+            st.session_state.current_page_key = "Financial Ledger"
             show_financial_ledger()
         elif page == "Compliance":
+            st.session_state.current_page_key = "Compliance"
             show_compliance_view()
         elif page == "Life-in-Japan Support":
+            st.session_state.current_page_key = "Life-in-Japan Support"
             show_support_hub()
         elif page == "Virtual Classroom":
+            st.session_state.current_page_key = "Virtual Classroom"
             # Import and show virtual classroom page
             try:
                 from dashboard.pages.virtual_classroom import main as show_virtual_classroom
@@ -2472,6 +2542,7 @@ def main():
                     with st.expander("Debug Info"):
                         st.code(traceback.format_exc())
         elif page == "Admin Dashboard":
+            st.session_state.current_page_key = "Admin Dashboard"
             if admin_mode:
                 show_admin_dashboard()
             else:

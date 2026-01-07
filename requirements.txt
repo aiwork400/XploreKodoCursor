@@ -8,19 +8,19 @@ sqlalchemy==2.0.23
 psycopg2-binary==2.9.9  # PostgreSQL driver
 
 # Environment & Configuration
-python-dotenv==1.0.0
+python-dotenv>=1.1.1
 
 # API Framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-pydantic==2.5.2
+pydantic>=2.11.0
 
 # Dashboard
 streamlit==1.28.1
 pandas==2.1.3
 
 # OpenAI (for Phase 2: Voice-to-Voice)
-openai==1.6.1
+openai>=2.2.0
 
 # Google Cloud Translation (for Multi-Language Socratic Questioning)
 google-cloud-translate==3.15.1
@@ -45,3 +45,12 @@ requests==2.31.0
 
 # Testing (optional, but recommended for CI/CD)
 pytest==7.4.3
+
+# RAG & Vector Store (Phase 2)
+# chromadb==0.4.22
+faiss-cpu==1.10.0
+# faiss-cpu==1.7.4
+langchain==0.1.0
+langchain-community==0.0.20
+sentence-transformers==2.3.1
+tenacity==8.2.3  # Retry logic for API calls

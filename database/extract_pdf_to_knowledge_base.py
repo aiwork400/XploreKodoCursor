@@ -23,10 +23,10 @@ from sqlalchemy.orm import Session
 from database.db_manager import KnowledgeBase, SessionLocal
 
 # PDF files to process
-PDF_FILES = [
-    "Nihongo Sou Matome N3 - Bunpou.pdf",
-    "Minna_No_Nihongo Part 1.pdf",
-]
+# NOTE: Legacy image-based PDFs have been removed as part of RAG transition.
+# New documents should be placed in the knowledge_base/ directory as PDF/TXT/MD files.
+# This script now scans knowledge_base/ directory for documents to process.
+PDF_FILES = []  # Empty list - will scan knowledge_base/ directory instead
 
 
 def is_image_based_pdf(pdf_path: Path, sample_pages: int = 3) -> tuple[bool, float]:
@@ -121,7 +121,7 @@ def suggest_alternative_formats(pdf_path: Path) -> None:
     print("  - Primary: .txt or .md files (if you can extract text manually)")
     print("  - Secondary: OCR processing (if PDF must be kept)")
     print("  - Alternative: .docx files (if formatting is important)")
-    print("\nPlace converted files in the project root directory.")
+    print("\nPlace converted files in the knowledge_base/ directory.")
     print("=" * 80 + "\n")
 
 
@@ -286,28 +286,53 @@ def store_concepts_in_database(concepts: list[dict], source_file: str, db: Sessi
 
 
 def main():
-    """Main function to extract PDFs and populate knowledge base."""
+    """
+    Main function to extract documents from knowledge_base/ directory and populate knowledge base.
+    
+    Scans knowledge_base/ directory for PDF, TXT, and MD files to process.
+    """
     project_root = Path(__file__).parent.parent
+    knowledge_base_dir = project_root / "knowledge_base"
     
     db: Session = SessionLocal()
     try:
         total_concepts = 0
         
-        for pdf_filename in PDF_FILES:
-            pdf_path = project_root / pdf_filename
-            
-            if not pdf_path.exists():
-                print(f"[WARN] Warning: PDF file not found: {pdf_path}")
-                continue
-            
-            print(f"[INFO] Processing: {pdf_filename}")
-            concepts = extract_text_from_pdf(pdf_path)
-            print(f"   Extracted {len(concepts)} concepts")
-            
-            stored = store_concepts_in_database(concepts, str(pdf_path), db)
-            db.commit()
-            print(f"   Stored {stored} new concepts in database")
-            total_concepts += stored
+        # RAG Transition: Scan knowledge_base/ directory for documents
+        if not knowledge_base_dir.exists():
+            print(f"[WARN] knowledge_base/ directory not found: {knowledge_base_dir}")
+            print("[INFO] Creating knowledge_base/ directory...")
+            knowledge_base_dir.mkdir(exist_ok=True)
+            print("[INFO] Please place PDF/TXT/MD files in knowledge_base/ directory for processing.")
+            return
+        
+        # Find all PDF, TXT, and MD files in knowledge_base/
+        document_files = []
+        document_files.extend(knowledge_base_dir.glob("*.pdf"))
+        document_files.extend(knowledge_base_dir.glob("*.txt"))
+        document_files.extend(knowledge_base_dir.glob("*.md"))
+        
+        if not document_files:
+            print(f"[INFO] No PDF/TXT/MD files found in {knowledge_base_dir}")
+            print("[INFO] Please place documents in knowledge_base/ directory for processing.")
+            return
+        
+        print(f"[INFO] Found {len(document_files)} document(s) in knowledge_base/ directory")
+        
+        # Process PDF files (TXT/MD processing can be added later)
+        for doc_path in document_files:
+            if doc_path.suffix.lower() == '.pdf':
+                print(f"[INFO] Processing PDF: {doc_path.name}")
+                concepts = extract_text_from_pdf(doc_path)
+                print(f"   Extracted {len(concepts)} concepts")
+                
+                stored = store_concepts_in_database(concepts, str(doc_path), db)
+                db.commit()
+                print(f"   Stored {stored} new concepts in database")
+                total_concepts += stored
+            elif doc_path.suffix.lower() in ['.txt', '.md']:
+                print(f"[INFO] Skipping {doc_path.suffix.upper()} file: {doc_path.name}")
+                print(f"   [INFO] TXT/MD processing will be implemented in future RAG phases")
         
         print(f"\n[SUCCESS] Total concepts stored: {total_concepts}")
         
