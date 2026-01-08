@@ -34,7 +34,9 @@ from agency.operations_agent.operations_agent import OperationsAgent
 from agency.financier_agent.financier_agent import FinancierAgent
 from agency.training_agent.training_agent import LanguageCoachAgent
 from agency.student_progress_agent.student_progress_agent import StudentProgressAgent
-from mvp_v1.legal.visa_compliance_agent_swarm import VisaComplianceAgent
+# Resolve mvp_v1 Path: Fix case sensitivity - folder is Legal with capital L
+# Python imports are case-sensitive on Linux/Mac, so use correct case
+from mvp_v1.Legal.visa_compliance_agent_swarm import VisaComplianceAgent
 from agency.messenger_agent.messenger_agent import MessengerAgent
 from agency.vr_environment_agent.vr_environment_agent import VREnvironmentAgent
 from agency.support_agent.support_agent import SupportAgent
@@ -87,6 +89,7 @@ communication_flows = [
     (god_agent, vr_environment_agent),  # For VR/AR scene management (Phase 2)
     (training_agent, vr_environment_agent),  # TrainingAgent coordinates VR scenes
     (god_agent, support_agent),  # For legal/personal advice about life in Japan
+    (support_agent, operations_agent),  # Enable Concierge to request Wisdom Reports from OperationsAgent
 ]
 
 # --- 3. Shared user context from config.py ---

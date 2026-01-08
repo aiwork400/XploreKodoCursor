@@ -412,8 +412,8 @@ class SocraticQuestioningTool(BaseTool):
                     KnowledgeBase.language == "ja",
                     KnowledgeBase.concept_title.in_(weak_word_titles),
                     KnowledgeBase.category.in_(prev_phase_categories)
-        ).all()
-        
+                ).all()
+                
                 if review_concepts:
                     concept = random.choice(review_concepts)
                     content = concept.concept_content
@@ -464,8 +464,8 @@ class SocraticQuestioningTool(BaseTool):
             
             if weak_concepts:
                 concept = random.choice(weak_concepts)
-        content = concept.concept_content
-        first_sentence = content.split('。')[0] if '。' in content else content[:200]
+                content = concept.concept_content
+                first_sentence = content.split('。')[0] if '。' in content else content[:200]
                 return {
                     "concept_title": concept.concept_title,
                     "concept_content": first_sentence,
@@ -485,14 +485,14 @@ class SocraticQuestioningTool(BaseTool):
             concept = random.choice(all_phase_concepts)
             content = concept.concept_content
             first_sentence = content.split('。')[0] if '。' in content else content[:200]
-        return {
-            "concept_title": concept.concept_title,
-            "concept_content": first_sentence,
-            "full_content": content,
-            "source_file": concept.source_file,
-            "page_number": concept.page_number,
+            return {
+                "concept_title": concept.concept_title,
+                "concept_content": first_sentence,
+                "full_content": content,
+                "source_file": concept.source_file,
+                "page_number": concept.page_number,
                 "rag_priority": "fallback",
-        }
+            }
         
         return None
 

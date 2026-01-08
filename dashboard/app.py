@@ -461,6 +461,22 @@ def show_concierge_widget():
             st.session_state.concierge_avatar_talking = False
         if "concierge_audio_output" not in st.session_state:
             st.session_state.concierge_audio_output = None
+        # Fix greeting flag: Ensure it persists in session state
+        if "concierge_initial_greeting_sent" not in st.session_state:
+            st.session_state.concierge_initial_greeting_sent = False
+        
+        # Initialize global messages if not exists
+        if 'messages' not in st.session_state:
+            st.session_state.messages = []
+        
+        # PRIORITIZE INPUT PROCESSING: Check for pending input FIRST (before greeting check)
+        # This ensures user input is processed immediately, even before greeting logic
+        user_input = None
+        if "pending_user_input" in st.session_state and st.session_state.pending_user_input:
+            user_input = st.session_state.pending_user_input
+            del st.session_state.pending_user_input
+            # If user_input is detected, immediately set greeting flag to prevent greeting from showing
+            st.session_state.concierge_initial_greeting_sent = True
         
         # Language Selector - Moved to top for video-language sync
         language_options = {
@@ -508,20 +524,9 @@ def show_concierge_widget():
         
         st.markdown("---")
         
-        # Rendering Order: Process user input FIRST before displaying messages [cite: 2025-12-21]
-        # This ensures new messages are appended to st.session_state.messages before the display loop runs
-        
-        # Initialize global messages if not exists
-        if 'messages' not in st.session_state:
-            st.session_state.messages = []
-        
-        # Greeting Suppression: Initialize flag to prevent multiple initial greetings [cite: 2025-12-21]
-        if 'concierge_initial_greeting_sent' not in st.session_state:
-            st.session_state.concierge_initial_greeting_sent = False
-        
-        # Greeting Suppression: Add initial greeting only once when session starts [cite: 2025-12-21]
-        # This must happen BEFORE processing user input to ensure greeting appears at the top
-        if not st.session_state.concierge_initial_greeting_sent and len(st.session_state.messages) == 0:
+        # Bulletproof the Greeting: Use .get() method to ensure flag check is safe
+        # Once flag is True, this block is physically impossible to enter
+        if not st.session_state.get('concierge_initial_greeting_sent', False) and len(st.session_state.messages) == 0:
             # Add welcome greeting only if no messages exist
             greeting_text = {
                 "en": "Hello! 👋 I'm the Xplora Kodo Concierge. How can I help you today?",
@@ -546,135 +551,157 @@ def show_concierge_widget():
             horizontal=True
         )
         
-        user_input = None
-        
-        if input_method == "💬 Text":
-            # Text input - use text_input with a send button (chat_input doesn't work in sidebar)
-            text_input = st.text_input(
-                "Type your message:",
-                key="concierge_text_input",
-                placeholder="Ask me anything about Xplora Kodo..."
-            )
-            send_button = st.button("📤 Send", key="concierge_send_text", type="primary")
-            if send_button and text_input:
-                user_input = text_input
-            elif send_button and not text_input:
-                st.warning("⚠️ Please enter a message before sending.")
-        else:
-            # Voice input using streamlit-mic-recorder
-            st.markdown("**🎤 Voice Recording:**")
-            
-            # Initialize recording state
-            if "recorded_audio" not in st.session_state:
-                st.session_state.recorded_audio = None
-            
-            try:
-                from streamlit_mic_recorder import mic_recorder
+        # PRIORITIZE INPUT PROCESSING: Process button clicks and input immediately
+        if user_input is None:  # Only check for new input if we don't already have pending input
+            if input_method == "💬 Text":
+                # Text input - use st.form with clear_on_submit to avoid widget mutation error
+                # Fix Widget Mutation: Use form with clear_on_submit instead of manual state manipulation
+                # Remove Manual Key Assignment: Don't manually set st.session_state.concierge_text_input
                 
-                # Place mic_recorder in sidebar - this should render the button in the sidebar
-                st.markdown("Click the button below to start recording:")
-                audio_data = mic_recorder(
-                    key="concierge_voice_recorder",
-                    start_prompt="🎤 Start Recording",
-                    stop_prompt="⏹️ Stop Recording",
-                    just_once=False,
-                )
+                # Use buffer variable to capture input value - must be declared outside form scope
+                user_text_buffer = None
+                form_submitted = False
                 
-                # If mic_recorder returns data, store it
-                if audio_data:
-                    st.session_state.recorded_audio = audio_data
+                with st.form(key="concierge_text_form", clear_on_submit=True):
+                    # Use buffer variable to capture input value before form clears
+                    user_text_buffer = st.text_input(
+                        "Type your message:",
+                        key="concierge_text_input",
+                        placeholder="Ask me anything about Xplora Kodo..."
+                    )
+                    
+                    # Ensure input capture: Process button click and capture input
+                    form_submitted = st.form_submit_button("📤 Send", type="primary")
                 
-            except ImportError:
-                st.warning("⚠️ streamlit-mic-recorder not installed")
-                st.code("pip install streamlit-mic-recorder")
-                audio_data = None
-            except Exception as e:
-                st.warning(f"⚠️ Mic recorder error: {str(e)}")
-                audio_data = None
-                # Show fallback text input on error
-                st.markdown("---")
-                st.info("💡 Voice recording unavailable. Please use text input instead.")
-                fallback_text = st.text_input("Type your message:", key="concierge_voice_fallback")
-                if fallback_text:
-                    user_input = fallback_text
-            
-            # Use recorded audio
-            final_audio = st.session_state.recorded_audio if st.session_state.recorded_audio else audio_data
-            
-            if final_audio:
-                st.markdown("---")
-                st.success("✅ Recording complete! Listen to your recording:")
-                
-                # Playback audio - make it prominent
-                # Handle both dict format (from mic_recorder) and direct bytes
-                audio_bytes_for_playback = final_audio.get("bytes") if isinstance(final_audio, dict) else final_audio
-                if audio_bytes_for_playback:
-                    # Ensure it's bytes, not base64 string
-                    if isinstance(audio_bytes_for_playback, str):
-                        audio_bytes_for_playback = base64.b64decode(audio_bytes_for_playback)
-                    st.audio(audio_bytes_for_playback, format="audio/wav", autoplay=False)
-                    st.caption("🔊 Click the play button above to hear your recording")
-                else:
-                    st.warning("⚠️ Audio playback not available, but you can still send it for transcription.")
-                
-                # Show options
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("🔄 Record Again", key="record_again_btn"):
-                        st.session_state.recorded_audio = None
-                        st.rerun()
-                
-                with col2:
-                    send_voice_btn = st.button("📤 Send Voice", key="concierge_send_voice", type="primary")
-                
-                # Process voice input when Send is clicked
-                if send_voice_btn:
-                    st.info("🎤 Transcribing your voice...")
-                    # Get audio bytes - handle both dict and bytes format
-                    audio_bytes_for_transcription = final_audio.get("bytes") if isinstance(final_audio, dict) else final_audio
-                    if not audio_bytes_for_transcription:
-                        st.error("Error: No audio data found. Please record again.")
+                # Fix Logic Order: Process form submission AFTER form context, using buffer variable
+                # The buffer variable contains the value before form clears on submit
+                if form_submitted:
+                    if user_text_buffer and user_text_buffer.strip():
+                        # Store input to process - Streamlit will rerun automatically after form submission
+                        # Buffer variable ensures we capture the value before form clears
+                        user_input = user_text_buffer.strip()
+                        # If user_input is detected, immediately set greeting flag to prevent greeting from showing
+                        st.session_state.concierge_initial_greeting_sent = True
                     else:
-                        # Ensure it's bytes, not base64 string
-                        if isinstance(audio_bytes_for_transcription, str):
-                            audio_bytes_for_transcription = base64.b64decode(audio_bytes_for_transcription)
-                        
-                        transcribed = process_concierge_voice(
-                            audio_bytes_for_transcription,
-                            st.session_state.concierge_language
-                        )
-                        if transcribed and not transcribed.startswith("Error"):
-                            st.success(f"✅ Transcribed: \"{transcribed}\"" )
-                            # Store transcribed text for processing
-                            st.session_state.pending_user_input = transcribed
-                            # Clear recorded audio after processing
-                            st.session_state.recorded_audio = None
-                            st.rerun()  # Rerun to process the transcribed text
-                        elif transcribed and transcribed.startswith("Error"):
-                            st.error(transcribed)
-                            st.info("💡 Tip: Make sure you're speaking clearly and your microphone is working. You can also type your message below.")
+                        st.warning("⚠️ Please enter a message before sending.")
+                        user_input = None
             else:
-                st.caption("💡 Click the microphone button above to start recording.")
-            
-            # Fallback text input if no audio recorded
-            if not final_audio:
-                st.markdown("---")
-                fallback_input = st.text_input("Or type your message:", key="concierge_fallback_input")
-                if fallback_input:
-                    user_input = fallback_input
+                # Voice input using streamlit-mic-recorder
+                st.markdown("**🎤 Voice Recording:**")
+                
+                # Initialize recording state
+                if "recorded_audio" not in st.session_state:
+                    st.session_state.recorded_audio = None
+                
+                try:
+                    from streamlit_mic_recorder import mic_recorder
+                    
+                    # Place mic_recorder in sidebar - this should render the button in the sidebar
+                    st.markdown("Click the button below to start recording:")
+                    audio_data = mic_recorder(
+                        key="concierge_voice_recorder",
+                        start_prompt="🎤 Start Recording",
+                        stop_prompt="⏹️ Stop Recording",
+                        just_once=False,
+                    )
+                    
+                    # If mic_recorder returns data, store it
+                    if audio_data:
+                        st.session_state.recorded_audio = audio_data
+                    
+                except ImportError:
+                    st.warning("⚠️ streamlit-mic-recorder not installed")
+                    st.code("pip install streamlit-mic-recorder")
+                    audio_data = None
+                except Exception as e:
+                    st.warning(f"⚠️ Mic recorder error: {str(e)}")
+                    audio_data = None
+                    # Show fallback text input on error
+                    st.markdown("---")
+                    st.info("💡 Voice recording unavailable. Please use text input instead.")
+                    fallback_text = st.text_input("Type your message:", key="concierge_voice_fallback")
+                    if fallback_text:
+                        user_input = fallback_text
+                
+                # Use recorded audio
+                final_audio = st.session_state.recorded_audio if st.session_state.recorded_audio else audio_data
+                
+                if final_audio:
+                    st.markdown("---")
+                    st.success("✅ Recording complete! Listen to your recording:")
+                    
+                    # Playback audio - make it prominent
+                    # Handle both dict format (from mic_recorder) and direct bytes
+                    audio_bytes_for_playback = final_audio.get("bytes") if isinstance(final_audio, dict) else final_audio
+                    if audio_bytes_for_playback:
+                        # Ensure it's bytes, not base64 string
+                        if isinstance(audio_bytes_for_playback, str):
+                            audio_bytes_for_playback = base64.b64decode(audio_bytes_for_playback)
+                        st.audio(audio_bytes_for_playback, format="audio/wav", autoplay=False)
+                        st.caption("🔊 Click the play button above to hear your recording")
+                    else:
+                        st.warning("⚠️ Audio playback not available, but you can still send it for transcription.")
+                    
+                    # Show options
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("🔄 Record Again", key="record_again_btn"):
+                            st.session_state.recorded_audio = None
+                            st.rerun()
+                    
+                    with col2:
+                        send_voice_btn = st.button("📤 Send Voice", key="concierge_send_voice", type="primary")
+                    
+                    # Process voice input when Send is clicked
+                    if send_voice_btn:
+                        st.info("🎤 Transcribing your voice...")
+                        # Get audio bytes - handle both dict and bytes format
+                        audio_bytes_for_transcription = final_audio.get("bytes") if isinstance(final_audio, dict) else final_audio
+                        if not audio_bytes_for_transcription:
+                            st.error("Error: No audio data found. Please record again.")
+                        else:
+                            # Ensure it's bytes, not base64 string
+                            if isinstance(audio_bytes_for_transcription, str):
+                                audio_bytes_for_transcription = base64.b64decode(audio_bytes_for_transcription)
+                            
+                            transcribed = process_concierge_voice(
+                                audio_bytes_for_transcription,
+                                st.session_state.concierge_language
+                            )
+                            if transcribed and not transcribed.startswith("Error"):
+                                st.success(f"✅ Transcribed: \"{transcribed}\"" )
+                                # Store transcribed text for processing
+                                st.session_state.pending_user_input = transcribed
+                                # Clear recorded audio after processing
+                                st.session_state.recorded_audio = None
+                                st.rerun()  # Rerun to process the transcribed text
+                            elif transcribed and transcribed.startswith("Error"):
+                                st.error(transcribed)
+                                st.info("💡 Tip: Make sure you're speaking clearly and your microphone is working. You can also type your message below.")
+                else:
+                    st.caption("💡 Click the microphone button above to start recording.")
+                
+                # Fallback text input if no audio recorded
+                if not final_audio:
+                    st.markdown("---")
+                    fallback_input = st.text_input("Or type your message:", key="concierge_fallback_input")
+                    if fallback_input:
+                        user_input = fallback_input
         
-        # Check for pending input from voice transcription
-        if "pending_user_input" in st.session_state and st.session_state.pending_user_input:
-            user_input = st.session_state.pending_user_input
-            del st.session_state.pending_user_input
+        # PRIORITIZE INPUT PROCESSING: If we have user_input from button click, process it immediately
+        # (Pending input from voice was already processed at the top)
         
         # Rendering Order: Process user input FIRST, append to messages BEFORE display loop [cite: 2025-12-21]
         # This ensures new messages are in st.session_state.messages when the display loop runs
+        # Force response generation: Ensure input reaches Agentic call
         if user_input and user_input.strip():
+            # If user_input is detected, immediately set greeting flag to prevent greeting from showing
+            st.session_state.concierge_initial_greeting_sent = True
+            
             # Persistent Chat History: Append user message to both concierge-specific and global messages [cite: 2025-12-21]
             user_msg = {
                 "role": "user",
-                "content": user_input
+                "content": user_input.strip()
             }
             st.session_state.concierge_messages.append(user_msg)
             st.session_state.messages.append(user_msg)
@@ -683,6 +710,7 @@ def show_concierge_widget():
             # STATE LOGIC: Set avatar to talking while generating response
             st.session_state.concierge_avatar_talking = True
             try:
+                # Force response generation: Always call get_concierge_response
                 response = get_concierge_response(user_input.strip(), st.session_state.concierge_language)
                 
                 # Rendering Order: Append assistant response BEFORE display loop [cite: 2025-12-21]
@@ -697,7 +725,48 @@ def show_concierge_widget():
                 # TEXT-TO-VOICE TRIGGER: Generate TTS audio for both text and voice input
                 # This ensures the avatar talking animation is triggered
                 # AUDIO SYNC: Always generate audio, even in Text mode, to trigger isTalking animation
-                audio_output = generate_trilingual_tts(response, st.session_state.concierge_language)
+                # Disable TTS temporarily: Wrap in try-except with fallback voice
+                audio_output = None
+                try:
+                    audio_output = generate_trilingual_tts(response, st.session_state.concierge_language)
+                except Exception as tts_error:
+                    # TTS failed, log but don't interrupt flow
+                    logger.warning(f"TTS generation failed: {tts_error}")
+                    # Try with a default supported voice as fallback
+                    try:
+                        from google.cloud import texttospeech
+                        import config
+                        tts_client = texttospeech.TextToSpeechClient()
+                        synthesis_input = texttospeech.SynthesisInput(text=response)
+                        
+                        # Use default supported voices (avoid NEUTRAL gender which causes 400 error)
+                        fallback_voices = {
+                            'en': ('en-US', 'en-US-Standard-A'),
+                            'ja': ('ja-JP', 'ja-JP-Standard-A'),
+                            'ne': ('en-US', 'en-US-Standard-A')  # Fallback to English for Nepali
+                        }
+                        lang_code, voice_name = fallback_voices.get(
+                            st.session_state.concierge_language, 
+                            ('en-US', 'en-US-Standard-A')
+                        )
+                        
+                        voice = texttospeech.VoiceSelectionParams(
+                            language_code=lang_code,
+                            name=voice_name,
+                            ssml_gender=texttospeech.SsmlVoiceGender.FEMALE  # Use FEMALE instead of NEUTRAL
+                        )
+                        audio_config = texttospeech.AudioConfig(
+                            audio_encoding=texttospeech.AudioEncoding.MP3
+                        )
+                        tts_response = tts_client.synthesize_speech(
+                            input=synthesis_input,
+                            voice=voice,
+                            audio_config=audio_config
+                        )
+                        audio_output = tts_response.audio_content
+                    except Exception as fallback_error:
+                        logger.warning(f"TTS fallback also failed: {fallback_error}")
+                        audio_output = None
                 if audio_output:
                     # ROBUST FILE WRITING: Save audio as temp_voice.mp3 using absolute path
                     import os
@@ -784,6 +853,10 @@ def show_concierge_widget():
                             st.markdown(msg['content'])
         
         st.markdown("---")
+        
+        # State Logging: Add debug output to see if messages are being saved
+        st.sidebar.write(f"Debug: {len(st.session_state.messages)} messages")
+        st.sidebar.write(f"Debug: greeting_sent = {st.session_state.get('concierge_initial_greeting_sent', False)}")
                 
 
 
@@ -2168,10 +2241,60 @@ def get_concierge_response(user_input: str, language: str) -> str:
             # Note: User must manually select the page from sidebar - no automatic redirect
             return nav_message
         
+        # Check for Wisdom Report requests - Force Execution
+        wisdom_keywords = ["wisdom report", "wisdom hub", "operations report", "platform report", "daily report", "manifesto analysis", "generate report"]
+        if any(keyword in user_lower for keyword in wisdom_keywords):
+            # Force Execution: When user asks for Wisdom Report, trigger OperationsAgent via agency
+            try:
+                # Fix Import Path: Import agency instance from agency module (which exports from root agency.py)
+                from agency import agency as agency_swarm
+                # Use agency to communicate with OperationsAgent
+                # The SupportAgent (Concierge) will send a message to OperationsAgent
+                response = agency_swarm.run(
+                    user_input=f"Generate a wisdom report analyzing the platform manifesto and current status. Save it to the Wisdom Hub.",
+                    agent_name="SupportAgent"
+                )
+                return f"""✅ **Wisdom Report Request Received!**
+
+I've initiated a task with the OperationsAgent to generate a comprehensive wisdom report.
+
+**What happens next:**
+- OperationsAgent will analyze the platform manifesto and current status
+- The report will be saved to: `operations/reports/wisdom_report_YYYY_MM_DD.md`
+- You can view it in the **Wisdom Hub** page in the dashboard
+
+**To view the report:**
+1. Navigate to the Wisdom Hub page (use the sidebar navigation)
+2. Select the latest report from the dropdown
+3. The report will display platform metrics, Travel-Ready status, payment success rates, and recommendations
+
+**Note:** The report generation may take a few moments. Check the Wisdom Hub shortly!
+
+---
+{response if response else "Report generation initiated successfully."}"""
+            except Exception as e:
+                # Fallback if agency communication fails
+                return f"""✅ **Wisdom Report Request Received!**
+
+I understand you want a Wisdom Report. The OperationsAgent will generate this report analyzing:
+- Platform manifesto and current status
+- Travel-Ready candidate counts
+- Payment success metrics
+- System health status
+- Token optimization recommendations
+
+**To generate the report:**
+- The report will be saved to: `operations/reports/wisdom_report_YYYY_MM_DD.md`
+- You can view it in the **Wisdom Hub** page
+
+**Note:** If you're using the agency swarm directly, the SupportAgent will communicate with OperationsAgent to generate the report. If you encounter any issues, please check the Wisdom Hub page for existing reports.
+
+Error details: {str(e)}"""
+        
         # Check if it's a general question about the platform
         platform_keywords = ["what is", "what can", "how does", "how to", "help", "features", "capabilities"]
         if any(keyword in user_lower for keyword in platform_keywords) and not any(kw in user_lower for kw in ["visa", "bank", "housing", "health", "legal"]):
-            return '**Xplora Kodo Concierge 🤖 can help you with:**\n\n**Platform Features:**\n- Language learning (N5-N3 Japanese proficiency)\n- Voice coaching with AI Sensei\n- Virtual classroom with 2D animated avatar\n- Trilingual support (English, Japanese, Nepali)\n\n**Life-in-Japan Support:**\n- Visa and immigration questions\n- Banking and financial services\n- Healthcare and insurance\n- Housing and utilities\n- Legal rights and responsibilities\n\n**Navigation:**\n- Say "take me to [page name]" to navigate\n- Available pages: Candidate View, Virtual Classroom, Life-in-Japan Support, etc.\n\nTry asking about specific topics like "visa renewal" or "banking in Japan" for detailed information!'
+            return '**Xplora Kodo Concierge 🤖 can help you with:**\n\n**Platform Features:**\n- Language learning (N5-N3 Japanese proficiency)\n- Voice coaching with AI Sensei\n- Virtual classroom with 2D animated avatar\n- Trilingual support (English, Japanese, Nepali)\n\n**Life-in-Japan Support:**\n- Visa and immigration questions\n- Banking and financial services\n- Healthcare and insurance\n- Housing and utilities\n- Legal rights and responsibilities\n\n**Wisdom Reports:**\n- Ask for "wisdom report" or "operations report" to generate platform analysis\n- Reports are saved to the Wisdom Hub\n\n**Navigation:**\n- Say "take me to [page name]" to navigate\n- Available pages: Candidate View, Virtual Classroom, Life-in-Japan Support, Wisdom Hub, etc.\n\nTry asking about specific topics like "visa renewal" or "banking in Japan" for detailed information!'
         
         # Otherwise, use GetLifeInJapanAdvice for life-in-Japan questions
         advice_tool = GetLifeInJapanAdvice(
@@ -2311,16 +2434,17 @@ def generate_trilingual_tts(text: str, language: str, track: str | None = None) 
         if track and track in config.TRACK_TTS_PERSONALITY:
             personality = config.TRACK_TTS_PERSONALITY[track]
         
-        # Determine SSML gender based on track personality or default to NEUTRAL
-        ssml_gender = texttospeech.SsmlVoiceGender.NEUTRAL
+        # Determine SSML gender based on track personality or default to FEMALE (NEUTRAL causes 400 error)
+        # Disable TTS temporarily: Use FEMALE instead of NEUTRAL to avoid 400 Gender neutral voices error
+        ssml_gender = texttospeech.SsmlVoiceGender.FEMALE  # Default to FEMALE instead of NEUTRAL
         if personality:
-            gender_str = personality.get('ssml_gender', 'NEUTRAL')
+            gender_str = personality.get('ssml_gender', 'FEMALE')  # Default to FEMALE
             if gender_str == 'FEMALE':
                 ssml_gender = texttospeech.SsmlVoiceGender.FEMALE
             elif gender_str == 'MALE':
                 ssml_gender = texttospeech.SsmlVoiceGender.MALE
             else:
-                ssml_gender = texttospeech.SsmlVoiceGender.NEUTRAL
+                ssml_gender = texttospeech.SsmlVoiceGender.FEMALE  # Fallback to FEMALE instead of NEUTRAL
         
         voice = texttospeech.VoiceSelectionParams(
             language_code=lang_code,
@@ -2350,8 +2474,11 @@ def generate_trilingual_tts(text: str, language: str, track: str | None = None) 
         return tts_response.audio_content
         
     except Exception as e:
-        st.sidebar.warning(f"TTS unavailable: {str(e)}")
-        return None
+        # Disable TTS temporarily: Log error but don't show sidebar warning to prevent interruption
+        # The calling code will handle fallback
+        logger.warning(f"TTS unavailable: {str(e)}")
+        # Re-raise to allow caller to handle with fallback
+        raise
 
 
 # Main App
