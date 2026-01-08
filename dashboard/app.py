@@ -2241,60 +2241,34 @@ def get_concierge_response(user_input: str, language: str) -> str:
             # Note: User must manually select the page from sidebar - no automatic redirect
             return nav_message
         
-        # Check for Wisdom Report requests - Force Execution
+        # Check for Wisdom Report requests - Guide to Wisdom Hub
         wisdom_keywords = ["wisdom report", "wisdom hub", "operations report", "platform report", "daily report", "manifesto analysis", "generate report"]
         if any(keyword in user_lower for keyword in wisdom_keywords):
-            # Force Execution: When user asks for Wisdom Report, trigger OperationsAgent via agency
-            try:
-                # Fix Import Path: Import agency instance from agency module (which exports from root agency.py)
-                from agency import agency as agency_swarm
-                # Use agency to communicate with OperationsAgent
-                # The SupportAgent (Concierge) will send a message to OperationsAgent
-                response = agency_swarm.run(
-                    user_input=f"Generate a wisdom report analyzing the platform manifesto and current status. Save it to the Wisdom Hub.",
-                    agent_name="SupportAgent"
-                )
-                return f"""✅ **Wisdom Report Request Received!**
+            return """📊 **Wisdom Hub Available!**
 
-I've initiated a task with the OperationsAgent to generate a comprehensive wisdom report.
+I can help you access strategic insights and reports!
 
-**What happens next:**
-- OperationsAgent will analyze the platform manifesto and current status
-- The report will be saved to: `operations/reports/wisdom_report_YYYY_MM_DD.md`
-- You can view it in the **Wisdom Hub** page in the dashboard
+**To generate and view Wisdom Reports:**
+1. Navigate to the **Wisdom Hub** page using the sidebar menu
+2. Click the **"✨ Generate New Wisdom Report"** button
+3. View the latest strategic alignment insights and platform analysis
 
-**To view the report:**
-1. Navigate to the Wisdom Hub page (use the sidebar navigation)
-2. Select the latest report from the dropdown
-3. The report will display platform metrics, Travel-Ready status, payment success rates, and recommendations
+The Wisdom Hub transforms our core Manifesto and operational data into actionable insights to ensure your daily activities align with Xplora Kodo's foundational principles.
 
-**Note:** The report generation may take a few moments. Check the Wisdom Hub shortly!
-
----
-{response if response else "Report generation initiated successfully."}"""
-            except Exception as e:
-                # Fallback if agency communication fails
-                return f"""✅ **Wisdom Report Request Received!**
-
-I understand you want a Wisdom Report. The OperationsAgent will generate this report analyzing:
-- Platform manifesto and current status
-- Travel-Ready candidate counts
+**Available in Wisdom Hub:**
+- Strategic alignment reports
+- Platform manifesto analysis
+- Operational metrics and insights
+- Travel-Ready status analysis
 - Payment success metrics
-- System health status
-- Token optimization recommendations
+- System health recommendations
 
-**To generate the report:**
-- The report will be saved to: `operations/reports/wisdom_report_YYYY_MM_DD.md`
-- You can view it in the **Wisdom Hub** page
-
-**Note:** If you're using the agency swarm directly, the SupportAgent will communicate with OperationsAgent to generate the report. If you encounter any issues, please check the Wisdom Hub page for existing reports.
-
-Error details: {str(e)}"""
+Would you like help navigating to the Wisdom Hub, or do you have questions about our life-in-Japan services?"""
         
         # Check if it's a general question about the platform
         platform_keywords = ["what is", "what can", "how does", "how to", "help", "features", "capabilities"]
         if any(keyword in user_lower for keyword in platform_keywords) and not any(kw in user_lower for kw in ["visa", "bank", "housing", "health", "legal"]):
-            return '**Xplora Kodo Concierge 🤖 can help you with:**\n\n**Platform Features:**\n- Language learning (N5-N3 Japanese proficiency)\n- Voice coaching with AI Sensei\n- Virtual classroom with 2D animated avatar\n- Trilingual support (English, Japanese, Nepali)\n\n**Life-in-Japan Support:**\n- Visa and immigration questions\n- Banking and financial services\n- Healthcare and insurance\n- Housing and utilities\n- Legal rights and responsibilities\n\n**Wisdom Reports:**\n- Ask for "wisdom report" or "operations report" to generate platform analysis\n- Reports are saved to the Wisdom Hub\n\n**Navigation:**\n- Say "take me to [page name]" to navigate\n- Available pages: Candidate View, Virtual Classroom, Life-in-Japan Support, Wisdom Hub, etc.\n\nTry asking about specific topics like "visa renewal" or "banking in Japan" for detailed information!'
+            return '**Xplora Kodo Concierge 🤖 can help you with:**\n\n**Platform Features:**\n- Language learning (N5-N3 Japanese proficiency)\n- Voice coaching with AI Sensei\n- Virtual classroom with 2D animated avatar\n- Trilingual support (English, Japanese, Nepali)\n\n**Life-in-Japan Support:**\n- Visa and immigration questions\n- Banking and financial services\n- Healthcare and insurance\n- Housing and utilities\n- Legal rights and responsibilities\n\n**Wisdom Hub:**\n- Generate and view strategic alignment reports\n- Access the Wisdom Hub from the sidebar navigation\n- Analyze platform manifesto and operational insights\n\n**Navigation:**\n- Say "take me to [page name]" to navigate\n- Available pages: Candidate View, Virtual Classroom, Life-in-Japan Support, Wisdom Hub, etc.\n\nTry asking about specific topics like "visa renewal" or "banking in Japan" for detailed information!'
         
         # Otherwise, use GetLifeInJapanAdvice for life-in-Japan questions
         advice_tool = GetLifeInJapanAdvice(
@@ -2838,27 +2812,109 @@ def show_candidate_view():
 
 
 def show_wisdom_hub():
-    """Display wisdom reports from OperationsAgent."""
-    st.header("📊 Wisdom Hub")
-
-    reports = load_wisdom_reports()
-
-    if not reports:
-        st.info("No wisdom reports found. Generate one using the OperationsAgent.")
+    """Display wisdom reports from OperationsAgent with strategic alignment engine."""
+    # Purpose Header
+    st.write("### 📊 Wisdom Hub: Strategic Alignment Engine")
+    st.write(
+        "The Wisdom Hub transforms our core Manifesto and operational data into actionable insights. "
+        "Use this page to ensure your daily activities align with Xplora Kodo's foundational principles."
+    )
+    
+    st.markdown("---")
+    
+    # The Trigger Button: Generate New Wisdom Report
+    if st.button("✨ Generate New Wisdom Report", type="primary"):
+        try:
+            # Import agency instance
+            from agency import agency as agency_swarm
+            
+            # The Logic: Call agency.get_response_sync to trigger OperationsAgent (updated from get_completion)
+            with st.spinner("🔍 Analyzing Manifesto and generating strategic insights..."):
+                # Use agency.get_response_sync() - latest Agency Swarm standard (get_completion is deprecated)
+                # get_response_sync is the synchronous wrapper that handles async internally
+                response_result = agency_swarm.get_response_sync(
+                    message="OperationsAgent, please analyze the Manifesto and current data to generate a new Wisdom Report.",
+                    recipient_agent="OperationsAgent"
+                )
+                # Extract final_output from RunResult
+                response = response_result.final_output if response_result.final_output else "Report generation initiated."
+            
+            # Success Feedback
+            st.success("✅ Analysis complete! The report has been archived below.")
+            
+            # Refresh reports list after generation
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"❌ Error generating report: {str(e)}")
+            import traceback
+            if config.DEBUG:
+                with st.expander("Debug Info"):
+                    st.code(traceback.format_exc())
+    
+    st.markdown("---")
+    
+    # The Report Viewer & PDF Export
+    reports_dir = Path(__file__).parent.parent / "operations" / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Use os.listdir to find all .md files
+    import os
+    report_files = [f for f in os.listdir(reports_dir) if f.endswith('.md') and f.startswith('wisdom_report_')]
+    
+    if not report_files:
+        st.info("📋 No wisdom reports found yet. Click '✨ Generate New Wisdom Report' above to create your first strategic insight report.")
     else:
-        st.metric("Available Reports", len(reports))
-
-        # Select report
-        report_files = [r.name for r in reports]
-        selected_report = st.selectbox("Select Report", report_files)
-
-        if selected_report:
-            report_path = Path(__file__).parent.parent / "operations" / "reports" / selected_report
-            with open(report_path, "r", encoding="utf-8") as f:
-                report_content = f.read()
-
+        # Sort by modification time (newest first)
+        report_files.sort(key=lambda f: (reports_dir / f).stat().st_mtime, reverse=True)
+        
+        st.metric("📊 Available Reports", len(report_files))
+        
+        # Display the most recent report using st.markdown() inside a st.expander
+        latest_report = report_files[0]
+        latest_report_path = reports_dir / latest_report
+        
+        with open(latest_report_path, "r", encoding="utf-8") as f:
+            latest_report_content = f.read()
+        
+        # Display latest report in expander
+        with st.expander(f"📄 Latest Report: {latest_report}", expanded=True):
+            st.markdown(latest_report_content)
+        
+        # PDF Download: Use st.download_button to offer the content as .md file
+        st.download_button(
+            label="📥 Download Latest Report (.md)",
+            data=latest_report_content,
+            file_name=latest_report,
+            mime="text/markdown",
+            help="Download the latest wisdom report as a Markdown file"
+        )
+        
+        # Show all reports if there are multiple
+        if len(report_files) > 1:
             st.markdown("---")
-            st.markdown(report_content)
+            st.subheader("📚 All Reports")
+            
+            # Select report dropdown
+            selected_report = st.selectbox("Select Report to View", report_files)
+            
+            if selected_report:
+                selected_report_path = reports_dir / selected_report
+                with open(selected_report_path, "r", encoding="utf-8") as f:
+                    selected_report_content = f.read()
+                
+                with st.expander(f"📄 View: {selected_report}", expanded=False):
+                    st.markdown(selected_report_content)
+                
+                # Download button for selected report
+                st.download_button(
+                    label=f"📥 Download {selected_report} (.md)",
+                    data=selected_report_content,
+                    file_name=selected_report,
+                    mime="text/markdown",
+                    key=f"download_{selected_report}",
+                    help=f"Download {selected_report} as a Markdown file"
+                )
 
 
 def calculate_mastery_scores(candidate_id: str) -> tuple[dict, datetime | None]:
